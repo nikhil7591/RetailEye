@@ -136,7 +136,7 @@ body {
   border-radius: 50%;
   border: 4px solid #e2e8f0;
   border-top-color: #2d8bff;
-  animation: spin-slow 1s cubic-bezier(0.68, -0.55, 0.26.55, 1.55) infinite;
+  animation: spin-slow 1s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
 }
 .dark .spinner {
   border-color: #334155;

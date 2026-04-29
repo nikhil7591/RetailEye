@@ -35,7 +35,7 @@ export default function RestockList({ priority, rows }) {
           // Extract row number from the priority string (e.g. "Row 3 - Dairy Zone (18%)")
           const rowNumMatch = item.match(/Row\s+(\d+)/i);
           const rowNum = rowNumMatch ? parseInt(rowNumMatch[1], 10) : null;
-          const rowData = rowNum !== null ? rowMap[rowNum - 1] : null;
+          const rowData = rowNum !== null ? rowMap[rowNum] : null;
           const isCritical = rowData?.alert === "Critical";
 
           return (

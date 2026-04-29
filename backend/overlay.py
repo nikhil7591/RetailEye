@@ -95,9 +95,10 @@ def draw_overlay(frame: np.ndarray, rows_analysis: dict) -> np.ndarray:
     hud_w = min(400, out.shape[1])
 
     # Semi-transparent dark background
-    sub = out[0:hud_h, 0:hud_w].copy()
-    cv2.rectangle(out, (0, 0), (hud_w, hud_h), _COLOR_HUD_BG, -1)
-    out[0:hud_h, 0:hud_w] = cv2.addWeighted(out[0:hud_h, 0:hud_w], 0.7, sub, 0.3, 0)
+    sub = out[0:hud_h, 0:hud_w].copy()          # 1. copy original pixels first
+    overlay = out.copy()                          # 2. draw on a separate overlay
+    cv2.rectangle(overlay, (0, 0), (hud_w, hud_h), _COLOR_HUD_BG, -1)
+    cv2.addWeighted(overlay[0:hud_h, 0:hud_w], 0.55, sub, 0.45, 0, out[0:hud_h, 0:hud_w])
 
     for i, line in enumerate(hud_lines):
         y = 18 + i * line_h

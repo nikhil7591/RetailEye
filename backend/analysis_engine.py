@@ -85,7 +85,7 @@ def analyze(rows_with_products: list[dict]) -> dict:
         ]
 
         report_rows.append({
-            "row_id": row_id,
+            "row_id": row_id + 1,
             "zone_label": zone_label,
             "occupancy_percent": occupancy_pct,
             "alert": alert,
@@ -109,7 +109,7 @@ def analyze(rows_with_products: list[dict]) -> dict:
     # --- Restock priority (ascending occupancy, Critical first) -------------
     sorted_rows = sorted(report_rows, key=lambda r: r["occupancy_percent"])
     restock_priority = [
-        f"Row {r['row_id'] + 1} - {r['zone_label']} ({r['occupancy_percent']}%)"
+        f"Row {r['row_id']} - {r['zone_label']} ({r['occupancy_percent']}%)"
         for r in sorted_rows
         if r["alert"] in ("Critical", "Warning")
     ]

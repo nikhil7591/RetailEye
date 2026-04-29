@@ -4,6 +4,7 @@ Main application entry point with image/video analysis endpoints.
 """
 
 import os
+import glob
 import shutil
 import tempfile
 import traceback
@@ -85,9 +86,22 @@ def _run_image_pipeline(frame: np.ndarray) -> tuple[np.ndarray, dict]:
         row_dets = []
         for det in row:
             x1, y1, x2, y2 = det["bbox"]
-            x1, y1 = max(0, x1), max(0, y1)
-            x2, y2 = min(w, x2), min(h, y2)
-            crop = frame[y1:y2, x1:x2]
+            # Add 10px padding so label edges aren't cut off
+            PAD = 10
+            x1_p = max(0, x1 - PAD)
+            y1_p = max(0, y1 - PAD)
+            x2_p = min(w, x2 + PAD)
+            y2_p = min(h, y2 + PAD)
+            crop = frame[y1_p:y2_p, x1_p:x2_p]
+
+            # Skip Groq for tiny detections (likely noise)
+            crop_h = y2 - y1
+            crop_w = x2 - x1
+            if crop_h < 20 or crop_w < 20:
+                det["product_name"] = "Small Item"
+                det["category"] = "Other"
+                row_dets.append(det)
+                continue
 
             product_info = identify_product(crop)
             det["product_name"] = product_info.get("product_name", "Unidentified")
@@ -198,21 +212,21 @@ async def analyze_video(file: UploadFile = File(...)):
 
 @app.get("/download/json")
 async def download_json():
-    path = os.path.join(OUTPUTS_DIR, "report.json")
-    if not os.path.isfile(path):
+    files = sorted(glob.glob(os.path.join(OUTPUTS_DIR, "report_*.json")), key=os.path.getmtime, reverse=True)
+    if not files:
         raise HTTPException(status_code=404, detail="No report found.")
-    return FileResponse(path, media_type="application/json", filename="report.json")
+    return FileResponse(files[0], media_type="application/json", filename="report.json")
 
 @app.get("/download/csv")
 async def download_csv():
-    path = os.path.join(OUTPUTS_DIR, "report.csv")
-    if not os.path.isfile(path):
+    files = sorted(glob.glob(os.path.join(OUTPUTS_DIR, "report_*.csv")), key=os.path.getmtime, reverse=True)
+    if not files:
         raise HTTPException(status_code=404, detail="No report found.")
-    return FileResponse(path, media_type="text/csv", filename="report.csv")
+    return FileResponse(files[0], media_type="text/csv", filename="report.csv")
 
 @app.get("/download/video")
 async def download_video():
-    path = os.path.join(OUTPUTS_DIR, "processed_video.mp4")
-    if not os.path.isfile(path):
+    files = sorted(glob.glob(os.path.join(OUTPUTS_DIR, "processed_*.mp4")), key=os.path.getmtime, reverse=True)
+    if not files:
         raise HTTPException(status_code=404, detail="No processed video found.")
-    return FileResponse(path, media_type="video/mp4", filename="processed_video.mp4")
+    return FileResponse(files[0], media_type="video/mp4", filename="processed_video.mp4")

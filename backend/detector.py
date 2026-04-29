@@ -44,7 +44,7 @@ def detect(frame: np.ndarray) -> list[dict]:
           - class_name: str
           - is_empty: False  (empty-slot logic lives in analysis)
     """
-    results = _model.predict(frame, conf=0.3, verbose=False)
+    results = _model.predict(frame, conf=0.15, iou=0.4, verbose=False)
     detections: list[dict] = []
 
     for result in results:
@@ -94,7 +94,7 @@ def detect_rows(detections: list[dict], frame_height: int) -> list[list[dict]]:
     if not detections:
         return []
 
-    ROW_GAP_THRESHOLD = 60  # pixels
+    ROW_GAP_THRESHOLD = 80  # pixels
 
     # Compute Y centroid and sort
     for d in detections:
@@ -106,7 +106,8 @@ def detect_rows(detections: list[dict], frame_height: int) -> list[list[dict]]:
     current_row: list[dict] = [sorted_dets[0]]
 
     for det in sorted_dets[1:]:
-        if det["_y_center"] - current_row[-1]["_y_center"] > ROW_GAP_THRESHOLD:
+        row_mean_y = sum(d["_y_center"] for d in current_row) / len(current_row)
+        if det["_y_center"] - row_mean_y > ROW_GAP_THRESHOLD:
             rows.append(current_row)
             current_row = [det]
         else:
@@ -175,23 +176,13 @@ def detect_empty_slots(
 
         row_empty: list[list[int]] = []
 
-        # Check gap between left edge and first box
-        first_x1 = sorted_row[0]["bbox"][0]
-        if first_x1 > gap_threshold:
-            row_empty.append([0, row_y1, first_x1, row_y2])
-
-        # Check gaps between consecutive boxes
+        # Check gaps between consecutive boxes only (not at shelf borders)
         for i in range(len(sorted_row) - 1):
             right_edge = sorted_row[i]["bbox"][2]
             next_left = sorted_row[i + 1]["bbox"][0]
             gap = next_left - right_edge
             if gap > gap_threshold:
                 row_empty.append([right_edge, row_y1, next_left, row_y2])
-
-        # Check gap between last box and right edge
-        last_x2 = sorted_row[-1]["bbox"][2]
-        if (frame_width - last_x2) > gap_threshold:
-            row_empty.append([last_x2, row_y1, frame_width, row_y2])
 
         empty_counts.append(len(row_empty))
         empty_bboxes.append(row_empty)

@@ -1,37 +1,40 @@
 """
 RetailEye — Groq Vision Product Identifier
 Sends cropped product images to Groq's Llama-4-Scout model for identification.
-Implements retry with 1.5× zoom on low-confidence results.
+Implements retry with upscaled zoom on low-confidence results.
 """
 
 import base64
 import io
 import json
 import os
+import pathlib
 import time
 import traceback
 
+import cv2
 import numpy as np
 from dotenv import load_dotenv
 from PIL import Image
 
-load_dotenv()  # Load .env from project root or backend dir
+load_dotenv(pathlib.Path(__file__).parent.parent / ".env")
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 # System prompt sent to Groq
 _IDENTIFICATION_PROMPT = (
-    "You are a retail product identifier. Look at this shelf product image carefully.\n"
-    "Respond ONLY with a valid JSON object and nothing else:\n"
+    "You are analyzing a cropped image of a single product on a retail store shelf. "
+    "The product is a physical item with visible packaging, label, or branding. "
+    "Identify it as specifically as possible — include brand name if visible. "
+    "Respond ONLY with valid JSON:\n"
     "{\n"
-    '  "product_name": "exact product name",\n'
-    '  "category": "one of: Snacks, Beverages, Dairy, Personal Care, '
-    'Household, Electronics, Clothing, Grocery, Other",\n'
-    '  "confidence": "high or medium or low"\n'
+    '  "product_name": "Brand Name + Product Type (e.g. Lays Classic Salted Chips)",\n'
+    '  "category": "Snacks | Beverages | Dairy | Personal Care | Household | Electronics | Clothing | Grocery | Other",\n'
+    '  "confidence": "high | medium | low"\n'
     "}\n"
-    'If you cannot clearly identify the product, set product_name to '
-    '"Unidentified Product" and confidence to "low".'
+    "If the image is too blurry, too small, or shows an empty shelf section, "
+    'set product_name to "Unidentified Product" and confidence to "low".'
 )
 
 # ---------------------------------------------------------------------------
@@ -49,15 +52,15 @@ def _numpy_to_base64_jpeg(img_np: np.ndarray) -> str:
 
 
 def _zoom_center(img_np: np.ndarray, factor: float = 1.5) -> np.ndarray:
-    """
-    Return the centre crop that corresponds to a *factor*× zoom.
-    E.g. factor=1.5 keeps the inner 67 % of the image.
-    """
+    """Upscale the crop for better AI identification."""
     h, w = img_np.shape[:2]
-    new_h, new_w = int(h / factor), int(w / factor)
-    y_start = (h - new_h) // 2
-    x_start = (w - new_w) // 2
-    return img_np[y_start : y_start + new_h, x_start : x_start + new_w]
+    # Upscale to at least 224x224 (good minimum for vision models)
+    target_size = max(224, int(max(h, w) * factor))
+    # Maintain aspect ratio
+    scale = target_size / max(h, w)
+    new_w = max(1, int(w * scale))
+    new_h = max(1, int(h * scale))
+    return cv2.resize(img_np, (new_w, new_h), interpolation=cv2.INTER_LANCZOS4)
 
 
 def _parse_json_response(text: str) -> dict:

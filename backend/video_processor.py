@@ -66,11 +66,55 @@ def _process_single_frame(frame: np.ndarray) -> tuple[np.ndarray, dict]:
     return annotated, report
 
 
+def _process_frame_yolo_only(frame: np.ndarray, existing_report: dict) -> np.ndarray:
+    """Run YOLO + overlay only — skip Groq, reuse existing report for overlay."""
+    h, w = frame.shape[:2]
+    detections = detect(frame)
+    rows = detect_rows(detections, h)
+    if not rows:
+        return draw_overlay(frame, existing_report)
+
+    empty_counts, empty_bboxes = detect_empty_slots(rows, w)
+
+    # Build raw_rows using existing product names from report (no Groq call)
+    raw_rows = []
+    report_rows = existing_report.get("rows", [])
+
+    for row_idx, row in enumerate(rows):
+        row_report = report_rows[row_idx] if row_idx < len(report_rows) else {}
+        products = row_report.get("products", [])
+
+        row_dets = []
+        for det_idx, det in enumerate(row):
+            # Reuse product name from existing report if available
+            if det_idx < len(products):
+                det["product_name"] = products[det_idx]["name"]
+                det["category"] = row_report.get("zone_label", "Other Zone").replace(" Zone", "")
+            else:
+                det["product_name"] = "Product"
+                det["category"] = "Other"
+            row_dets.append(det)
+
+        raw_rows.append({
+            "row_id": row_idx,
+            "detections": row_dets,
+            "empty_slots": empty_counts[row_idx] if row_idx < len(empty_counts) else 0,
+            "empty_slot_bboxes": empty_bboxes[row_idx] if row_idx < len(empty_bboxes) else [],
+        })
+
+    # Use existing report but update _raw_rows for overlay
+    overlay_report = dict(existing_report)
+    overlay_report["_raw_rows"] = raw_rows
+    return draw_overlay(frame, overlay_report)
+
+
 def process_video(input_path: str, output_path: str) -> dict:
     """
     Process a video file through the RetailEye pipeline.
 
     - Reads every frame but only runs detection on every 3rd frame.
+    - Runs Groq (full pipeline) only on the FIRST processed frame to avoid
+      rate-limit issues. Subsequent frames use YOLO + overlay only.
     - Skipped frames receive the previous annotated overlay.
     - Returns the aggregated report from the last processed frame.
 
@@ -101,8 +145,9 @@ def process_video(input_path: str, output_path: str) -> dict:
     last_annotated = None
     last_report = analyze([])  # empty default
     frame_idx = 0
+    groq_done = False          # only run Groq once
 
-    print(f"[video_processor] Processing {total_frames} frames at {fps} FPS …")
+    print(f"[video_processor] Processing {total_frames} frames at {fps} FPS ...")
 
     while True:
         ret, frame = cap.read()
@@ -110,11 +155,17 @@ def process_video(input_path: str, output_path: str) -> dict:
             break
 
         if frame_idx % 3 == 0:
-            # Process this frame
-            annotated, report = _process_single_frame(frame)
+            if not groq_done:
+                # Full pipeline with Groq on first processed frame only
+                annotated, report = _process_single_frame(frame)
+                last_report = report
+                groq_done = True
+                print(f"  frame {frame_idx}/{total_frames} — full pipeline (Groq included)")
+            else:
+                # YOLO + overlay only — reuse last report's product names
+                annotated = _process_frame_yolo_only(frame, last_report)
+                print(f"  frame {frame_idx}/{total_frames} — YOLO only (Groq skipped)")
             last_annotated = annotated
-            last_report = report
-            print(f"  frame {frame_idx}/{total_frames} — processed")
         else:
             # Use previous annotated frame (or original if first frame was skipped)
             annotated = last_annotated if last_annotated is not None else frame

@@ -41,7 +41,7 @@ export default function RowBreakdownTable({ rows }) {
 
             return (
               <tr key={row.row_id}>
-                <td className="font-semibold">Row {row.row_id + 1}</td>
+                <td className="font-semibold">Row {row.row_id}</td>
                 <td>
                   <span className="inline-block rounded-lg bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700 dark:bg-brand-900/30 dark:text-brand-400">
                     {row.zone_label}
