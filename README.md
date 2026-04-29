@@ -110,15 +110,6 @@ Open **http://localhost:5173** in your browser.
 
 ---
 
-## 👥 Team
-
-| Name            | Role                    |
-| --------------- | ----------------------- |
-| Developer 1     | Backend & CV Pipeline   |
-| Developer 2     | Frontend & Integration  |
-
----
-
 ## 📄 License
 
 This project is for educational and demonstration purposes.
