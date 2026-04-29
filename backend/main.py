@@ -59,6 +59,24 @@ def _log(msg: str):
     t = time.strftime("%H:%M:%S")
     print(f"[{t}] {msg}")
 
+
+def _build_empty_shelf_rows(frame_height: int, frame_width: int, row_count: int = 3) -> list[dict]:
+    """Create conservative fallback shelf rows when YOLO finds nothing."""
+    rows: list[dict] = []
+    band_height = frame_height / max(row_count, 1)
+
+    for row_idx in range(row_count):
+        y1 = int(max(0, row_idx * band_height + band_height * 0.08))
+        y2 = int(min(frame_height - 1, (row_idx + 1) * band_height - band_height * 0.08))
+        rows.append({
+            "row_id": row_idx,
+            "detections": [],
+            "empty_slots": 1,
+            "empty_slot_bboxes": [[0, y1, max(1, frame_width - 1), y2]],
+        })
+
+    return rows
+
 def _run_image_pipeline(frame: np.ndarray) -> tuple[np.ndarray, dict]:
     h, w = frame.shape[:2]
     _log(f"🖼️  Started image pipeline (Resolution: {w}x{h})")
@@ -70,8 +88,13 @@ def _run_image_pipeline(frame: np.ndarray) -> tuple[np.ndarray, dict]:
     # 2. Cluster into rows
     rows = detect_rows(detections, h)
     if not rows:
-        _log("⚠️  [YOLOv8] No rows detected. Returning empty report.")
-        return frame, analyze([])
+        _log("⚠️  [YOLOv8] No rows detected. Using fallback empty shelf bands.")
+
+        raw_rows = _build_empty_shelf_rows(h, w)
+        report = analyze(raw_rows)
+        report["_raw_rows"] = raw_rows
+        annotated = draw_overlay(frame, report)
+        return annotated, report
 
     _log(f"📚 [Clustering] Formed {len(rows)} shelf rows")
 
@@ -97,7 +120,7 @@ def _run_image_pipeline(frame: np.ndarray) -> tuple[np.ndarray, dict]:
             # Skip Groq for tiny detections (likely noise)
             crop_h = y2 - y1
             crop_w = x2 - x1
-            if crop_h < 20 or crop_w < 20:
+            if crop_h < 15 or crop_w < 15:
                 det["product_name"] = "Small Item"
                 det["category"] = "Other"
                 row_dets.append(det)

@@ -12,6 +12,24 @@ from analysis_engine import analyze
 from overlay import draw_overlay
 
 
+def _build_empty_shelf_rows(frame_height: int, frame_width: int, row_count: int = 3) -> list[dict]:
+    """Create conservative fallback shelf rows when YOLO finds nothing."""
+    rows: list[dict] = []
+    band_height = frame_height / max(row_count, 1)
+
+    for row_idx in range(row_count):
+        y1 = int(max(0, row_idx * band_height + band_height * 0.08))
+        y2 = int(min(frame_height - 1, (row_idx + 1) * band_height - band_height * 0.08))
+        rows.append({
+            "row_id": row_idx,
+            "detections": [],
+            "empty_slots": 1,
+            "empty_slot_bboxes": [[0, y1, max(1, frame_width - 1), y2]],
+        })
+
+    return rows
+
+
 def _process_single_frame(frame: np.ndarray) -> tuple[np.ndarray, dict]:
     """
     Run the full pipeline on one frame: detect → identify → analyze → overlay.
@@ -25,9 +43,12 @@ def _process_single_frame(frame: np.ndarray) -> tuple[np.ndarray, dict]:
     # 2. Cluster into rows
     rows = detect_rows(detections, h)
     if not rows:
-        # No detections — return frame as-is with empty report
-        empty_report = analyze([])
-        return frame, empty_report
+        # No detections — fall back to empty shelf bands instead of hiding rows
+        raw_rows = _build_empty_shelf_rows(h, w)
+        report = analyze(raw_rows)
+        report["_raw_rows"] = raw_rows
+        annotated = draw_overlay(frame, report)
+        return annotated, report
 
     # 3. Detect empty slots per row
     empty_counts, empty_bboxes = detect_empty_slots(rows, w)

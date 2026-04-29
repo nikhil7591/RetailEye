@@ -42,13 +42,13 @@ def _draw_dashed_rect(img, pt1, pt2, color, thickness=2, dash_len=10):
         _draw_dashed_line(img, start, end, color, thickness, dash_len)
 
 
-def _put_label(img, text, org, font_scale=0.5, color=_COLOR_TEXT, bg_color=_COLOR_TEXT_BG):
+def _put_label(img, text, org, font_scale=0.65, color=_COLOR_TEXT, bg_color=_COLOR_TEXT_BG):
     font = cv2.FONT_HERSHEY_SIMPLEX
     (tw, th), baseline = cv2.getTextSize(text, font, font_scale, 1)
     x, y = org
     y = max(th + 4, y)
     cv2.rectangle(img, (x, y - th - 4), (x + tw + 4, y + baseline + 2), bg_color, -1)
-    cv2.putText(img, text, (x + 2, y - 2), font, font_scale, color, 1, cv2.LINE_AA)
+    cv2.putText(img, text, (x + 2, y - 2), font, font_scale, color, 2, cv2.LINE_AA)
 
 
 def draw_overlay(frame: np.ndarray, rows_analysis: dict) -> np.ndarray:
@@ -71,16 +71,16 @@ def draw_overlay(frame: np.ndarray, rows_analysis: dict) -> np.ndarray:
                 bbox = det.get("bbox", [])
                 if len(bbox) == 4:
                     x1, y1, x2, y2 = bbox
-                    cv2.rectangle(out, (x1, y1), (x2, y2), color, 2)
+                    cv2.rectangle(out, (x1, y1), (x2, y2), color, 4)
                     label = det.get("product_name", "Product")
-                    _put_label(out, label, (x1, y1 - 4), 0.4, _COLOR_TEXT, color)
+                    _put_label(out, label, (x1, y1 - 4), 0.65, _COLOR_TEXT, color)
 
             for ebbox in raw_rows[idx].get("empty_slot_bboxes", []):
                 if len(ebbox) == 4:
                     ex1, ey1, ex2, ey2 = ebbox
-                    _draw_dashed_rect(out, (ex1, ey1), (ex2, ey2), _COLOR_EMPTY, 2)
+                    _draw_dashed_rect(out, (ex1, ey1), (ex2, ey2), _COLOR_EMPTY, 3)
                     cx, cy = (ex1 + ex2) // 2 - 20, (ey1 + ey2) // 2
-                    _put_label(out, "EMPTY", (cx, cy), 0.5, (255,255,255), _COLOR_EMPTY)
+                    _put_label(out, "EMPTY", (cx, cy), 0.65, (255,255,255), _COLOR_EMPTY)
 
     # HUD overlay (top-left)
     overall_occ = rows_analysis.get("overall_occupancy", 0)

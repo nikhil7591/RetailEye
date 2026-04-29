@@ -44,7 +44,7 @@ def detect(frame: np.ndarray) -> list[dict]:
           - class_name: str
           - is_empty: False  (empty-slot logic lives in analysis)
     """
-    results = _model.predict(frame, conf=0.15, iou=0.4, verbose=False)
+    results = _model.predict(frame, conf=0.25, iou=0.4, verbose=False)
     detections: list[dict] = []
 
     for result in results:
@@ -94,7 +94,7 @@ def detect_rows(detections: list[dict], frame_height: int) -> list[list[dict]]:
     if not detections:
         return []
 
-    ROW_GAP_THRESHOLD = 80  # pixels
+    ROW_GAP_THRESHOLD = 60  # pixels - reduced for better row separation
 
     # Compute Y centroid and sort
     for d in detections:
@@ -160,13 +160,19 @@ def detect_empty_slots(
             empty_bboxes.append([])
             continue
 
+        # Sparse rows are unreliable for gap-based empty-slot inference.
+        if len(row) < 3:
+            empty_counts.append(0)
+            empty_bboxes.append([])
+            continue
+
         # Sort detections left-to-right
         sorted_row = sorted(row, key=lambda d: d["bbox"][0])
 
         # Average bbox width in this row
         widths = [d["bbox"][2] - d["bbox"][0] for d in sorted_row]
         avg_width = sum(widths) / len(widths) if widths else 0
-        gap_threshold = avg_width * 0.8
+        gap_threshold = max(avg_width * 1.35, 90)
 
         # Compute row's vertical extent (for gap bbox height)
         y_tops = [d["bbox"][1] for d in sorted_row]
