@@ -6,11 +6,11 @@ export function Sidebar() {
   const location = useLocation();
 
   const navItems = [
-    { name: "Dashboard", href: "/", icon: LayoutDashboard },
-    { name: "History", href: "/history", icon: History },
-    { name: "Reports", href: "/reports", icon: FileText },
-    { name: "Alerts", href: "/alerts", icon: Bell },
-    { name: "Settings", href: "/settings", icon: Settings },
+    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { name: "History", href: "/dashboard/history", icon: History },
+    { name: "Reports", href: "/dashboard/reports", icon: FileText },
+    { name: "Alerts", href: "/dashboard/alerts", icon: Bell },
+    { name: "Settings", href: "/dashboard/settings", icon: Settings },
   ];
 
   return (
@@ -30,7 +30,7 @@ export function Sidebar() {
               key={item.name}
               to={item.href}
               onClick={() => {
-                if (item.name === "Dashboard" && location.pathname === "/") {
+                if (item.name === "Dashboard" && location.pathname === "/dashboard") {
                   window.dispatchEvent(new CustomEvent("retaileye:new-upload"));
                 }
               }}

@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 export function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
-  const isDashboard = location.pathname === "/";
+  const isDashboard = location.pathname === "/dashboard";
 
   return (
     <header className="sticky top-0 z-40 flex h-[72px] w-full items-center justify-between bg-[#F8FAFC] px-6 pt-6">
