@@ -45,11 +45,10 @@ function Navbar() {
                     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
                   }
                 }}
-                className={`px-4 py-2 text-[13.5px] font-semibold rounded-lg transition-colors ${
-                  active === link
+                className={`px-4 py-2 text-[13.5px] font-semibold rounded-lg transition-colors ${active === link
                     ? "text-[#6366F1]"
                     : "text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9]"
-                }`}
+                  }`}
               >
                 {link}
               </button>
@@ -94,12 +93,12 @@ function ShelfOccupancyCard() {
         </div>
         {/* Mini graph */}
         <svg className="w-full h-8 mt-2" viewBox="0 0 120 30">
-          <path d="M0,25 Q15,20 30,18 T60,12 T90,8 T120,5" fill="none" stroke="#8B5CF6" strokeWidth="2.5" strokeLinecap="round"/>
-          <path d="M0,25 Q15,20 30,18 T60,12 T90,8 T120,5 L120,30 L0,30 Z" fill="url(#miniGrad)" opacity="0.15"/>
+          <path d="M0,25 Q15,20 30,18 T60,12 T90,8 T120,5" fill="none" stroke="#8B5CF6" strokeWidth="2.5" strokeLinecap="round" />
+          <path d="M0,25 Q15,20 30,18 T60,12 T90,8 T120,5 L120,30 L0,30 Z" fill="url(#miniGrad)" opacity="0.15" />
           <defs>
             <linearGradient id="miniGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#8B5CF6"/>
-              <stop offset="100%" stopColor="#8B5CF6" stopOpacity="0"/>
+              <stop offset="0%" stopColor="#8B5CF6" />
+              <stop offset="100%" stopColor="#8B5CF6" stopOpacity="0" />
             </linearGradient>
           </defs>
         </svg>
@@ -114,7 +113,7 @@ function AIDetectionCard() {
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: 0.8, duration: 0.6 }}
-      className="absolute top-[10%] right-[-8%] z-20"
+      className="absolute -top-[2%] -right-[5%] md:-right-[15%] z-20 hidden sm:block"
     >
       <div className="bg-white/95 backdrop-blur-xl rounded-2xl px-5 py-4 shadow-[0_20px_40px_-15px_rgba(99,102,241,0.2)] border border-white/60 min-w-[190px]">
         <div className="flex items-center gap-2 mb-3">
@@ -145,9 +144,9 @@ function ScoreCard() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 1.0, duration: 0.6 }}
-      className="absolute bottom-[10%] right-[-5%] z-20"
+      className="absolute bottom-[8%] -right-[5%] md:-right-[15%] z-20 hidden sm:block"
     >
-      <motion.div 
+      <motion.div
         animate={{ y: [0, -8, 0] }}
         transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
         className="bg-white/95 backdrop-blur-xl rounded-2xl p-5 shadow-[0_25px_50px_-12px_rgba(99,102,241,0.25)] border border-white/60 flex flex-col items-center"
@@ -487,7 +486,7 @@ export default function LandingPage() {
       {/* Very subtle glow to prevent harsh contrast, but keep it mostly white to blend with image.png */}
       <div className="fixed inset-0 bg-white -z-10" />
       <div className="fixed top-0 left-0 w-[800px] h-[800px] bg-gradient-to-br from-[#EEF2FF] to-transparent rounded-full blur-[120px] opacity-40 pointer-events-none -z-10" />
-      
+
       <Navbar />
       <HeroSection />
       <FeatureCards />
