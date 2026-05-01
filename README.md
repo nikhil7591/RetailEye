@@ -73,50 +73,32 @@ React Dashboard  →  live results · heatmap · restock priority list
 
 ## 🏗️ System Architecture
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                  React Frontend (Vercel)                      │
-│     React 18 · Vite · TailwindCSS · Recharts · Framer Motion │
-└─────────────────────────┬────────────────────────────────────┘
-                          │  HTTP REST
-┌─────────────────────────▼────────────────────────────────────┐
-│              FastAPI Backend (Render — Docker)                │
-│   /analyze/image  /analyze/video  /history  /stats           │
-│   /settings  /notifications  /download  /health              │
-└──────┬──────────┬──────────┬───────────────┬─────────────────┘
-       │          │          │               │
-       ▼          ▼          ▼               ▼
-  detector.py  groq_      analysis_      overlay.py
-  (YOLOv8      vision.py  engine.py     report_generator.py
-   dual-run)   (Llama 4   (occupancy,   (JSON + CSV export)
-               Scout)     alerts)
-       │          │
-       ▼          ▼
-HuggingFace    Groq API
-Hub            (Llama 4
-(products.pt   Scout 17B)
- + empty.pt)
-                               │
-                               ▼
-                     Neon DB (PostgreSQL)
-                     asyncpg · JSONB · analyses
-                     settings · notifications
-```
+<div align="center">
+
+![System Architecture](docs/system_architecture.png)
+
+</div>
 
 ---
 
-## 🔁 9-Step Processing Pipeline
+## 🔁 9-Step Workflow
+
+<div align="center">
+
+![Workflow Diagram](docs/workflow.png)
+
+</div>
 
 ```
 Step 1  →  Ingest           FastAPI reads file bytes → OpenCV BGR frame
 Step 2  →  Dual Detection   products.pt (conf=0.25) + empty.pt (conf=0.15) in parallel
 Step 3  →  Grid Fallback    If detections < 3 → 4×4 grid re-analysis via Groq Vision
 Step 4  →  Row Clustering   detect_rows() groups detections by Y-coordinate
-Step 5  →  Gap Detection    Per-row gap analysis between adjacent product bboxes
-Step 6  →  Groq Vision ID   Crop each detection → Llama 4 Scout → name + category
-Step 7  →  Analysis Engine  Occupancy %, alerts, zone labels, restock priority, shelf score
-Step 8  →  Overlay + Export overlay.py annotated image · report_generator JSON + CSV
-Step 9  →  Persist + Serve  Neon PostgreSQL insert → JSON response → React dashboard
+Step 5  →  Groq Vision ID   Crop each detection → Llama 4 Scout → name + category
+Step 6  →  Analysis Engine  Occupancy %, alerts, zone labels, restock priority, shelf score
+Step 7  →  Overlay + Export overlay.py annotated image · report_generator JSON + CSV
+Step 8  →  DB Persist       Neon PostgreSQL insert — JSONB report + shelf score + URLs
+Step 9  →  Dashboard        JSON response → React frontend live render
 ```
 
 > ⚡ **Token Optimization:** Detections with confidence ≥ 0.80 skip Groq Vision entirely, saving ~40% in API calls on high-confidence shelves.
@@ -174,6 +156,9 @@ RetailEye/
 │       ├── hooks/            ← Custom React hooks
 │       ├── contexts/         ← Theme, auth contexts
 │       └── lib/              ← Utility helpers
+├── docs/
+│   ├── retaileye_system_architecture.png   ← Architecture diagram
+│   └── retaileye_workflow_diagram.png      ← Workflow diagram
 ├── samples/                  ← Sample shelf images for testing
 ├── render.yaml               ← Render deployment config
 └── README.md
@@ -348,7 +333,7 @@ Set in Vercel dashboard:
 **Nikhil Kumar**
 CSE-AI Student | Chitkara University
 
-📧 nikhil759100@gmail.com
+📧 nikhil759100@gmail.com 
 
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-0077B5?style=flat&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/nikhil-kumar-2974292a9/)
 [![GitHub](https://img.shields.io/badge/GitHub-Follow-181717?style=flat&logo=github&logoColor=white)](https://github.com/nikhil7591)
