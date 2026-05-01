@@ -15,12 +15,12 @@ export function Sidebar() {
 
   return (
     <div className="flex h-screen w-[260px] shrink-0 flex-col border-r border-[#E2E8F0] bg-[#FFFFFF]">
-      <div className="flex h-[72px] items-center px-6">
+      <Link to="/" className="flex h-[72px] items-center px-6 hover:opacity-80 transition-opacity">
         <Eye className="h-6 w-6 text-[#4F46E5]" />
         <span className="ml-3 text-xl font-bold tracking-tight text-[#0F172A]">
           Retail<span className="text-[#4F46E5]">Eye</span>
         </span>
-      </div>
+      </Link>
 
       <div className="flex-1 overflow-y-auto py-4 flex flex-col gap-1 px-4">
         {navItems.map((item) => {
