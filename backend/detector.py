@@ -70,12 +70,14 @@ def detect(frame: np.ndarray) -> list[dict]:
         # Gradio can return a string, a dict, or a file path
         data = {}
         if isinstance(result, str):
-            # Check if result is a file path
-            if os.path.exists(result):
-                with open(result, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-            else:
+            try:
+                # Try to parse it directly as JSON first
                 data = json.loads(result)
+            except json.JSONDecodeError:
+                # If it's not JSON, check if it's a file path saved by Gradio
+                if os.path.exists(result):
+                    with open(result, "r", encoding="utf-8") as f:
+                        data = json.load(f)
         elif isinstance(result, dict):
             data = result
 
