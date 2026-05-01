@@ -46,7 +46,10 @@ export function SingleAnalysis() {
   const [error, setError]       = useState(null);
   const [zoom, setZoom]         = useState(1);
   const [isDragging, setIsDragging] = useState(false);
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const fileRef = useRef(null);
+  const scrollContainerRef = useRef(null);
 
   const handleFile = async (file) => {
     if (!file) return;
@@ -182,14 +185,46 @@ export function SingleAnalysis() {
                     <button onClick={() => setZoom(z => Math.max(z - 0.25, 0.5))} className="p-1.5 rounded-lg bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#64748B]"><ZoomOut className="h-4 w-4"/></button>
                     <span className="text-xs font-mono text-[#64748B] w-10 text-center">{Math.round(zoom * 100)}%</span>
                     <button onClick={() => setZoom(z => Math.min(z + 0.25, 4))} className="p-1.5 rounded-lg bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#64748B]"><ZoomIn className="h-4 w-4"/></button>
+                    {zoom !== 1 && (
+                      <button onClick={() => setZoom(1)} className="ml-1 px-2 py-1 rounded-lg bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#64748B] text-[10px] font-semibold">Reset</button>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent className="p-4">
-                  <div className="overflow-auto rounded-xl bg-[#0F172A] border border-[#1E293B] max-h-[420px]">
+                  <div
+                    ref={scrollContainerRef}
+                    className="overflow-auto rounded-xl bg-[#0F172A] border border-[#1E293B] max-h-[420px]"
+                    style={{ cursor: zoom > 1 ? (isPanning ? "grabbing" : "grab") : "default" }}
+                    onWheel={(e) => {
+                      if (e.ctrlKey || e.metaKey) {
+                        e.preventDefault();
+                        setZoom(z => Math.min(Math.max(z + (e.deltaY < 0 ? 0.15 : -0.15), 0.5), 4));
+                      }
+                    }}
+                    onMouseDown={(e) => {
+                      if (zoom > 1 && e.button === 0) {
+                        setIsPanning(true);
+                        setPanStart({ x: e.clientX + scrollContainerRef.current.scrollLeft, y: e.clientY + scrollContainerRef.current.scrollTop });
+                      }
+                    }}
+                    onMouseMove={(e) => {
+                      if (isPanning && scrollContainerRef.current) {
+                        scrollContainerRef.current.scrollLeft = panStart.x - e.clientX;
+                        scrollContainerRef.current.scrollTop = panStart.y - e.clientY;
+                      }
+                    }}
+                    onMouseUp={() => setIsPanning(false)}
+                    onMouseLeave={() => setIsPanning(false)}
+                  >
                     <img
                       src={imageSrc}
                       alt="Annotated shelf"
-                      style={{ transform: `scale(${zoom})`, transformOrigin: "top left", display: "block", width: `${100/zoom}%`, transition: "transform 0.2s" }}
+                      draggable={false}
+                      style={{
+                        width: `${zoom * 100}%`,
+                        display: "block",
+                        userSelect: "none",
+                      }}
                     />
                   </div>
                 </CardContent>

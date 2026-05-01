@@ -32,49 +32,72 @@ def _build_empty_shelf_rows(frame_height: int, frame_width: int, row_count: int 
 
 def _process_single_frame(frame: np.ndarray) -> tuple[np.ndarray, dict]:
     """
-    Run the full pipeline on one frame: detect → identify → analyze → overlay.
+    Run the full dual-run pipeline on one frame:
+    detect (2 runs) → identify → analyze → overlay.
     Returns (annotated_frame, report_dict).
     """
     h, w = frame.shape[:2]
 
-    # 1. YOLO detection
+    # 1. YOLO dual-run detection
     detections = detect(frame)
 
     # 2. Cluster into rows
     rows = detect_rows(detections, h)
     if not rows:
-        # No detections — fall back to empty shelf bands instead of hiding rows
         raw_rows = _build_empty_shelf_rows(h, w)
         report = analyze(raw_rows)
         report["_raw_rows"] = raw_rows
         annotated = draw_overlay(frame, report)
         return annotated, report
 
-    # 3. Detect empty slots per row
-    empty_counts, empty_bboxes = detect_empty_slots(rows, w)
+    # 3. Gap-based empty detection needs ONLY product detections
+    product_only_rows = [
+        [d for d in row if d.get("class_name") != "empty_space"]
+        for row in rows
+    ]
+    gap_counts, gap_bboxes = detect_empty_slots(product_only_rows, w)
 
-    # 4. Identify each product via Groq Vision
+    # 4. Identify products via Groq Vision + separate YOLO empties
     raw_rows = []
     for row_idx, row in enumerate(rows):
-        row_dets = []
+        product_dets = []
+        yolo_empty_count = 0
+        yolo_empty_bboxes = []
+
         for det in row:
+            # Separate YOLO-detected empty spaces from products
+            if det.get("class_name") == "empty_space":
+                yolo_empty_count += 1
+                yolo_empty_bboxes.append(det["bbox"])
+                continue
+
             x1, y1, x2, y2 = det["bbox"]
-            # Clamp to frame bounds
             x1, y1 = max(0, x1), max(0, y1)
             x2, y2 = min(w, x2), min(h, y2)
-            crop = frame[y1:y2, x1:x2]
 
-            product_info = identify_product(crop)
-            det["product_name"] = product_info.get("product_name", "Unidentified Product")
-            det["category"] = product_info.get("category", "Other")
-            det["groq_confidence"] = product_info.get("confidence", "low")
-            row_dets.append(det)
+            if (y2 - y1) < 15 or (x2 - x1) < 15:
+                det["product_name"] = "Small Item"
+                det["category"] = "Other"
+            elif det.get("confidence", 0) >= 0.80:
+                det["product_name"] = "Product"
+                det["category"] = "Other"
+            else:
+                crop = frame[y1:y2, x1:x2]
+                product_info = identify_product(crop)
+                det["product_name"] = product_info.get("product_name", "Unidentified Product")
+                det["category"] = product_info.get("category", "Other")
+                det["groq_confidence"] = product_info.get("confidence", "low")
+            product_dets.append(det)
+
+        # Merge YOLO empties + gap-based empties
+        gc = gap_counts[row_idx] if row_idx < len(gap_counts) else 0
+        gb = gap_bboxes[row_idx] if row_idx < len(gap_bboxes) else []
 
         raw_rows.append({
             "row_id": row_idx,
-            "detections": row_dets,
-            "empty_slots": empty_counts[row_idx] if row_idx < len(empty_counts) else 0,
-            "empty_slot_bboxes": empty_bboxes[row_idx] if row_idx < len(empty_bboxes) else [],
+            "detections": product_dets,
+            "empty_slots": yolo_empty_count + gc,
+            "empty_slot_bboxes": yolo_empty_bboxes + gb,
         })
 
     # 5. Analyze

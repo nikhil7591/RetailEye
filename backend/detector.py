@@ -1,6 +1,9 @@
 """
-RetailEye — YOLOv8 Product & Shelf Detector
-Handles object detection, row clustering, and empty-slot identification.
+RetailEye — YOLOv8 Dual-Model Product & Shelf Detector
+Two separate YOLO models run in parallel:
+  - products.pt  → product detection   (class 0 = product)
+  - empty.pt     → empty space detection (class 0 = empty_space)
+Results are merged into a unified detection list.
 """
 
 import os
@@ -8,27 +11,54 @@ import numpy as np
 from ultralytics import YOLO
 
 # ---------------------------------------------------------------------------
-# Model loading
+# Model loading — Dual Model Architecture
 # ---------------------------------------------------------------------------
 _MODEL_DIR = os.path.join(os.path.dirname(__file__), "models")
-_CUSTOM_MODEL = os.path.join(_MODEL_DIR, "shelf_model.pt")
+_PRODUCT_MODEL_PATH = os.path.join(_MODEL_DIR, "products.pt")
+_EMPTY_MODEL_PATH = os.path.join(_MODEL_DIR, "empty.pt")
+_LEGACY_MODEL_PATH = os.path.join(_MODEL_DIR, "best.pt")
 
-# Prefer a fine-tuned shelf model if present; otherwise fall back to the
-# general-purpose YOLOv8-nano that Ultralytics auto-downloads.
-if os.path.isfile(_CUSTOM_MODEL):
-    _model = YOLO(_CUSTOM_MODEL)
-    print(f"[detector] Loaded custom model from {_CUSTOM_MODEL}")
+# --- Product Detection Model ---
+if os.path.isfile(_PRODUCT_MODEL_PATH):
+    _model_product = YOLO(_PRODUCT_MODEL_PATH)
+    print(f"[detector] ✅ Product model loaded: {_PRODUCT_MODEL_PATH}")
+elif os.path.isfile(_LEGACY_MODEL_PATH):
+    _model_product = YOLO(_LEGACY_MODEL_PATH)
+    print(f"[detector] ⚠️  products.pt not found — falling back to best.pt")
 else:
-    _model = YOLO("yolov8n.pt")
-    print("[detector] Custom model not found — using default yolov8n.pt")
+    _model_product = YOLO("yolov8n.pt")
+    print("[detector] ⚠️  No product model found — using default yolov8n.pt")
+
+print(f"[detector]    Product model classes: {_model_product.names}")
+
+# --- Empty Space Detection Model ---
+if os.path.isfile(_EMPTY_MODEL_PATH):
+    _model_empty = YOLO(_EMPTY_MODEL_PATH)
+    print(f"[detector] ✅ Empty space model loaded: {_EMPTY_MODEL_PATH}")
+elif os.path.isfile(_LEGACY_MODEL_PATH):
+    _model_empty = YOLO(_LEGACY_MODEL_PATH)
+    print(f"[detector] ⚠️  empty.pt not found — falling back to best.pt")
+else:
+    _model_empty = YOLO("yolov8n.pt")
+    print("[detector] ⚠️  No empty model found — using default yolov8n.pt")
+
+print(f"[detector]    Empty model classes: {_model_empty.names}")
 
 
 # ---------------------------------------------------------------------------
-# Core detection
+# Core detection — Dual Model Pipeline
 # ---------------------------------------------------------------------------
 def detect(frame: np.ndarray) -> list[dict]:
     """
-    Run YOLOv8 inference on a single BGR frame.
+    Dual-model YOLOv8 inference on a single BGR frame.
+
+    Two separately trained models run on the same frame:
+
+      Model 1 (products.pt)  — conf=0.25, detects products
+      Model 2 (empty.pt)     — conf=0.15, detects empty spaces
+                                (lower conf — empty spaces are subtle)
+
+    Results from both models are merged into a single list.
 
     Parameters
     ----------
@@ -41,27 +71,44 @@ def detect(frame: np.ndarray) -> list[dict]:
         Each dict contains:
           - bbox: [x1, y1, x2, y2]  (pixel coords, ints)
           - confidence: float
-          - class_name: str
-          - is_empty: False  (empty-slot logic lives in analysis)
+          - class_name: str  ("product" or "empty_space")
+          - is_empty: bool
     """
-    results = _model.predict(frame, conf=0.25, iou=0.4, verbose=False)
     detections: list[dict] = []
 
-    for result in results:
-        boxes = result.boxes
-        for box in boxes:
+    # --- Model 1: Product Detection (products.pt) ---
+    product_results = _model_product.predict(
+        frame, conf=0.25, iou=0.45, verbose=False
+    )
+    n_prod = 0
+    for result in product_results:
+        for box in result.boxes:
             x1, y1, x2, y2 = box.xyxy[0].tolist()
-            conf = float(box.conf[0])
-            cls_id = int(box.cls[0])
-            cls_name = _model.names.get(cls_id, f"class_{cls_id}")
-
             detections.append({
                 "bbox": [int(x1), int(y1), int(x2), int(y2)],
-                "confidence": conf,
-                "class_name": cls_name,
+                "confidence": float(box.conf[0]),
+                "class_name": "product",
                 "is_empty": False,
             })
+            n_prod += 1
 
+    # --- Model 2: Empty Space Detection (empty.pt) ---
+    empty_results = _model_empty.predict(
+        frame, conf=0.15, iou=0.45, verbose=False
+    )
+    n_empty = 0
+    for result in empty_results:
+        for box in result.boxes:
+            x1, y1, x2, y2 = box.xyxy[0].tolist()
+            detections.append({
+                "bbox": [int(x1), int(y1), int(x2), int(y2)],
+                "confidence": float(box.conf[0]),
+                "class_name": "empty_space",
+                "is_empty": True,
+            })
+            n_empty += 1
+
+    print(f"[detector] Model 1: {n_prod} products | Model 2: {n_empty} empty spaces | Total: {len(detections)}")
     return detections
 
 

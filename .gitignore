@@ -44,6 +44,12 @@ Thumbs.db
 *.swp
 
 # ==============================
+# Local Data & Tests
+# ==============================
+backend/data.yaml
+backend/test_api.py
+
+# ==============================
 # Documentation / Internal
 # ==============================
 PRD.md

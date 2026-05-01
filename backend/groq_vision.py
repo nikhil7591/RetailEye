@@ -1,7 +1,7 @@
-"""
-RetailEye — Groq Vision Product Identifier
+"""RetailEye — Groq Vision Product Identifier
 Sends cropped product images to Groq's Llama-4-Scout model for identification.
 Implements retry with upscaled zoom on low-confidence results.
+Includes circuit-breaker to stop hammering the API after a 429 rate limit.
 """
 
 import base64
@@ -9,6 +9,7 @@ import io
 import json
 import os
 import pathlib
+import re
 import time
 import traceback
 
@@ -22,19 +23,34 @@ load_dotenv(pathlib.Path(__file__).parent.parent / ".env")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 
+# ---------------------------------------------------------------------------
+# Circuit breaker — once rate-limited, skip all API calls until cooldown ends
+# ---------------------------------------------------------------------------
+_rate_limited_until: float = 0.0  # epoch timestamp; 0 = not limited
+
 # System prompt sent to Groq
 _IDENTIFICATION_PROMPT = (
-    "You are analyzing a cropped image of a single product on a retail store shelf. "
-    "The product is a physical item with visible packaging, label, or branding. "
-    "Identify it as specifically as possible — include brand name if visible. "
-    "Respond ONLY with valid JSON:\n"
+    "You are a product identification expert for Indian retail stores. "
+    "You are given a cropped image of a SINGLE product sitting on a store shelf.\n\n"
+    "Your task:\n"
+    "1. READ any visible text, logo, or brand name on the packaging.\n"
+    "2. Identify the product as specifically as possible (brand + variant).\n"
+    "3. Common Indian brands include: Maggi, Parle-G, Lays, Kurkure, Amul, Haldiram, "
+    "Britannia, Tata, Dabur, Colgate, Surf Excel, Vim, Dettol, Bisleri, Pepsi, "
+    "Coca-Cola, Thums Up, Cadbury, Nestle, ITC, Patanjali, Mother Dairy, MTR, "
+    "Saffola, Fortune, Sunfeast, Good Day, Hide & Seek, Oreo, KitKat, "
+    "Clinic Plus, Head & Shoulders, Dove, Lifebuoy, Lux.\n\n"
+    "Respond ONLY with valid JSON (no extra text):\n"
     "{\n"
-    '  "product_name": "Brand Name + Product Type (e.g. Lays Classic Salted Chips)",\n'
-    '  "category": "Snacks | Beverages | Dairy | Personal Care | Household | Electronics | Clothing | Grocery | Other",\n'
+    '  "product_name": "<Brand> <Product> (e.g. Maggi 2-Minute Noodles)",\n'
+    '  "category": "Snacks | Beverages | Dairy | Personal Care | Household | Grocery | Other",\n'
     '  "confidence": "high | medium | low"\n'
-    "}\n"
-    "If the image is too blurry, too small, or shows an empty shelf section, "
-    'set product_name to "Unidentified Product" and confidence to "low".'
+    "}\n\n"
+    "Rules:\n"
+    "- If you can read the brand name clearly, confidence = high.\n"
+    "- If you can partially read it or guess from colors/shape, confidence = medium.\n"
+    "- ONLY say Unidentified Product if the image is completely unreadable.\n"
+    "- NEVER leave product_name as just 'Product' — always attempt a specific name."
 )
 
 # ---------------------------------------------------------------------------
@@ -47,16 +63,44 @@ def _numpy_to_base64_jpeg(img_np: np.ndarray) -> str:
     rgb = img_np[:, :, ::-1] if img_np.ndim == 3 else img_np
     pil_img = Image.fromarray(rgb)
     buffer = io.BytesIO()
-    pil_img.save(buffer, format="JPEG", quality=85)
+    pil_img.save(buffer, format="JPEG", quality=95)  # high quality to preserve label text
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 
-def _zoom_center(img_np: np.ndarray, factor: float = 1.5) -> np.ndarray:
+def _enhance_crop(img_np: np.ndarray, min_size: int = 512) -> np.ndarray:
+    """
+    Preprocess a product crop to maximize readability for the vision model:
+    1. Upscale small crops to at least min_size px on longest side.
+    2. Apply sharpening to make text/logos crisper.
+    3. Boost contrast slightly to separate text from background.
+    """
+    h, w = img_np.shape[:2]
+
+    # 1. Upscale if too small
+    if max(h, w) < min_size:
+        scale = min_size / max(h, w)
+        new_w = max(1, int(w * scale))
+        new_h = max(1, int(h * scale))
+        img_np = cv2.resize(img_np, (new_w, new_h), interpolation=cv2.INTER_LANCZOS4)
+
+    # 2. Sharpen (unsharp mask)
+    gaussian = cv2.GaussianBlur(img_np, (0, 0), sigmaX=2.0)
+    img_np = cv2.addWeighted(img_np, 1.5, gaussian, -0.5, 0)
+
+    # 3. Slight contrast boost via CLAHE on L channel
+    lab = cv2.cvtColor(img_np, cv2.COLOR_BGR2LAB)
+    l_ch, a_ch, b_ch = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    l_ch = clahe.apply(l_ch)
+    img_np = cv2.cvtColor(cv2.merge([l_ch, a_ch, b_ch]), cv2.COLOR_LAB2BGR)
+
+    return img_np
+
+
+def _zoom_center(img_np: np.ndarray, factor: float = 2.0) -> np.ndarray:
     """Upscale the crop for better AI identification."""
     h, w = img_np.shape[:2]
-    # Upscale to at least 224x224 (good minimum for vision models)
-    target_size = max(224, int(max(h, w) * factor))
-    # Maintain aspect ratio
+    target_size = max(512, int(max(h, w) * factor))
     scale = target_size / max(h, w)
     new_w = max(1, int(w * scale))
     new_h = max(1, int(h * scale))
@@ -104,40 +148,59 @@ def _parse_json_response(text: str) -> dict:
 # Groq API call
 # ---------------------------------------------------------------------------
 
+def _parse_retry_seconds(error_msg: str) -> float:
+    """Extract 'try again in XmY.Zs' from a Groq 429 error message."""
+    match = re.search(r"try again in (?:(\d+)m)?([\d.]+)s", error_msg, re.IGNORECASE)
+    if match:
+        minutes = int(match.group(1) or 0)
+        seconds = float(match.group(2) or 0)
+        return minutes * 60 + seconds
+    return 60.0  # conservative default
+
+
 def _call_groq(base64_jpeg: str) -> dict:
     """
     Send a single base64-encoded JPEG to Groq Vision and return the
     parsed JSON dict.  Raises on HTTP / network errors.
+    On 429 RateLimitError, sets the circuit breaker and re-raises.
     """
-    from groq import Groq  # lazy import so module loads even without key
+    global _rate_limited_until
+    from groq import Groq, RateLimitError  # lazy import
 
     client = Groq(api_key=GROQ_API_KEY)
 
-    response = client.chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": _IDENTIFICATION_PROMPT,
-                    },
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/jpeg;base64,{base64_jpeg}",
+    try:
+        response = client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": _IDENTIFICATION_PROMPT,
                         },
-                    },
-                ],
-            }
-        ],
-        max_tokens=256,
-        temperature=0.1,
-    )
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{base64_jpeg}",
+                            },
+                        },
+                    ],
+                }
+            ],
+            max_tokens=256,
+            temperature=0.1,
+        )
 
-    raw_text = response.choices[0].message.content
-    return _parse_json_response(raw_text)
+        raw_text = response.choices[0].message.content
+        return _parse_json_response(raw_text)
+
+    except RateLimitError as e:
+        retry_secs = _parse_retry_seconds(str(e))
+        _rate_limited_until = time.time() + retry_secs
+        print(f"[groq_vision] ⛔ Rate limited — circuit breaker ON for {retry_secs:.0f}s")
+        raise  # let caller handle gracefully
 
 
 # ---------------------------------------------------------------------------
@@ -149,10 +212,12 @@ def identify_product(crop_image_np: np.ndarray) -> dict:
     Identify a single product from its cropped BGR image.
 
     Flow:
-        1. Send crop to Groq Vision.
-        2. If confidence == "low" → retry with 1.5× zoomed centre crop.
-        3. If still low → return as "Unidentified Product".
-        4. On any API failure → return graceful fallback.
+        1. Check circuit breaker — if rate-limited, return fallback immediately.
+        2. Send crop to Groq Vision.
+        3. If confidence == "low" → retry with 1.5× zoomed centre crop.
+        4. If still low → return as "Unidentified Product".
+        5. On 429 → trip circuit breaker, return fallback (no further calls).
+        6. On any other API failure → return graceful fallback.
 
     Parameters
     ----------
@@ -178,25 +243,40 @@ def identify_product(crop_image_np: np.ndarray) -> dict:
         print("[groq_vision] GROQ_API_KEY not set — returning fallback")
         return fallback
 
-    try:
-        b64 = _numpy_to_base64_jpeg(crop_image_np)
-        result = _call_groq(b64)
-        time.sleep(0.1)  # polite rate-limit pause
+    # Guard: circuit breaker tripped — skip API call entirely
+    if time.time() < _rate_limited_until:
+        remaining = int(_rate_limited_until - time.time())
+        print(f"[groq_vision] ⛔ Circuit breaker active — skipping ({remaining}s left)")
+        return fallback
 
-        # Retry with zoom if confidence is low
+    try:
+        from groq import RateLimitError  # lazy import
+
+        # Always enhance the crop before sending
+        enhanced = _enhance_crop(crop_image_np)
+        b64 = _numpy_to_base64_jpeg(enhanced)
+        result = _call_groq(b64)
+        time.sleep(0.15)  # polite rate-limit pause
+
+        # Retry with stronger zoom if confidence is low
         if result.get("confidence", "low") == "low":
-            print("[groq_vision] Low confidence — retrying with 1.5× zoom")
-            zoomed = _zoom_center(crop_image_np, factor=1.5)
+            print("[groq_vision] Low confidence — retrying with 2× enhanced zoom")
+            zoomed = _zoom_center(crop_image_np, factor=2.0)
+            zoomed = _enhance_crop(zoomed, min_size=768)
             if zoomed.size > 0 and zoomed.shape[0] >= 5 and zoomed.shape[1] >= 5:
                 b64_zoom = _numpy_to_base64_jpeg(zoomed)
                 result = _call_groq(b64_zoom)
-                time.sleep(0.1)
+                time.sleep(0.15)
 
             # If still low after retry, force unidentified
             if result.get("confidence", "low") == "low":
                 result = fallback
 
         return result
+
+    except RateLimitError:
+        # Circuit breaker already set by _call_groq — just return fallback
+        return fallback
 
     except Exception:
         traceback.print_exc()

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Maximize2, ZoomIn, ZoomOut, ImageOff, CheckCircle2 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "../ui/Card";
 import { Button } from "../ui/Button";
@@ -20,13 +20,16 @@ function getColors(type) {
 export function OutputPreview({ imageSrc, detections = [], isAnalyzed = false }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  const scrollRef = useRef(null);
 
   const handleZoomIn  = () => setZoom((z) => Math.min(z + 0.25, 4));
   const handleZoomOut = () => setZoom((z) => Math.max(z - 0.25, 0.5));
   const handleReset   = () => setZoom(1);
 
   // Build overlay boxes — works with both mock % coords and real pixel coords
-  const renderBoxes = (scale = 1) =>
+  const renderBoxes = () =>
     detections.map((det, idx) => {
       const colors = getColors(det.type || det.category || "Other");
       return (
@@ -52,22 +55,15 @@ export function OutputPreview({ imageSrc, detections = [], isAnalyzed = false })
       );
     });
 
-  const ImageWithOverlay = ({ inModal = false }) => (
-    <div
-      className="relative w-full h-full"
-      style={{
-        transform: inModal ? `scale(${zoom})` : "scale(1)",
-        transformOrigin: "top left",
-        transition: "transform 0.2s ease",
-      }}
-    >
+  const ImageWithOverlay = () => (
+    <div className="relative w-full h-full">
       <img
         src={imageSrc}
         alt="Shelf analysis output"
         className="w-full h-full object-contain bg-[#0F172A]"
         draggable={false}
       />
-      {renderBoxes(zoom)}
+      {renderBoxes()}
     </div>
   );
 
@@ -171,60 +167,46 @@ export function OutputPreview({ imageSrc, detections = [], isAnalyzed = false })
             </div>
           </div>
 
-          {/* Scrollable image area */}
-          <div className="flex-1 overflow-auto p-6">
-            <div
-              className="relative inline-block"
-              style={{ minWidth: "100%" }}
-            >
-              <img
-                src={imageSrc}
-                alt="Full shelf"
-                style={{
-                  transform: `scale(${zoom})`,
-                  transformOrigin: "top left",
-                  display: "block",
-                  maxWidth: "none",
-                  width: `${100 / zoom}%`,
-                  transition: "transform 0.2s ease",
-                }}
-                draggable={false}
-              />
-              {detections.map((det, idx) => {
-                const colors = getColors(det.type || det.category || "Other");
-                return (
-                  <div
-                    key={idx}
-                    className="absolute"
-                    style={{
-                      left:   `${det.x}%`,
-                      top:    `${det.y}%`,
-                      width:  `${det.w}%`,
-                      height: `${det.h}%`,
-                      border: `${1.5 / zoom}px solid ${colors.border}`,
-                      transformOrigin: "top left",
-                      boxSizing: "border-box",
-                    }}
-                  >
-                    <span
-                      className="absolute left-0 whitespace-nowrap text-white font-bold"
-                      style={{
-                        top: `${-14 / zoom}px`,
-                        fontSize: `${9 / zoom}px`,
-                        lineHeight: 1.2,
-                        padding: `${1 / zoom}px ${3 / zoom}px`,
-                        backgroundColor: colors.label,
-                      }}
-                    >
-                      {det.label || det.product_name || "Item"}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+          {/* Scrollable image area with drag-to-pan */}
+          <div
+            ref={scrollRef}
+            className="flex-1 overflow-auto p-6"
+            style={{ cursor: zoom > 1 ? (isPanning ? "grabbing" : "grab") : "default" }}
+            onWheel={(e) => {
+              if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                setZoom(z => Math.min(Math.max(z + (e.deltaY < 0 ? 0.15 : -0.15), 0.5), 4));
+              }
+            }}
+            onMouseDown={(e) => {
+              if (zoom > 1 && e.button === 0) {
+                setIsPanning(true);
+                setPanStart({ x: e.clientX + scrollRef.current.scrollLeft, y: e.clientY + scrollRef.current.scrollTop });
+              }
+            }}
+            onMouseMove={(e) => {
+              if (isPanning && scrollRef.current) {
+                scrollRef.current.scrollLeft = panStart.x - e.clientX;
+                scrollRef.current.scrollTop = panStart.y - e.clientY;
+              }
+            }}
+            onMouseUp={() => setIsPanning(false)}
+            onMouseLeave={() => setIsPanning(false)}
+          >
+            <img
+              src={imageSrc}
+              alt="Full shelf"
+              draggable={false}
+              style={{
+                width: `${zoom * 100}%`,
+                display: "block",
+                userSelect: "none",
+              }}
+            />
           </div>
         </div>
       )}
     </>
   );
 }
+

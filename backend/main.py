@@ -102,16 +102,83 @@ def _build_empty_shelf_rows(frame_height: int, frame_width: int, row_count: int 
         })
     return rows
 
+
+def _grid_fallback(frame: np.ndarray, grid_size: int = 4) -> list[dict]:
+    """
+    Grid fallback (Step 3 of pipeline spec).
+    When YOLO detects fewer than 3 boxes, divide the image into a grid
+    and analyze each cell individually via Groq Vision.
+    """
+    h, w = frame.shape[:2]
+    _log(f"🔲 [Grid Fallback] Dividing image into {grid_size}x{grid_size} grid")
+    cell_h = h // grid_size
+    cell_w = w // grid_size
+
+    raw_rows: list[dict] = []
+
+    for row_idx in range(grid_size):
+        row_dets = []
+        empty_count = 0
+        empty_bboxes = []
+
+        for col_idx in range(grid_size):
+            y1 = row_idx * cell_h
+            y2 = min((row_idx + 1) * cell_h, h)
+            x1 = col_idx * cell_w
+            x2 = min((col_idx + 1) * cell_w, w)
+
+            cell_crop = frame[y1:y2, x1:x2]
+            if cell_crop.size == 0:
+                continue
+
+            product_info = identify_product(cell_crop)
+            name = product_info.get("product_name", "Unidentified Product")
+
+            if name in ("Unidentified Product", "Empty", "empty", ""):
+                # Cell appears empty
+                empty_count += 1
+                empty_bboxes.append([x1, y1, x2, y2])
+            else:
+                row_dets.append({
+                    "bbox": [x1, y1, x2, y2],
+                    "confidence": 0.5,
+                    "class_name": "product",
+                    "is_empty": False,
+                    "product_name": name,
+                    "category": product_info.get("category", "Other"),
+                })
+
+        raw_rows.append({
+            "row_id": row_idx,
+            "detections": row_dets,
+            "empty_slots": empty_count,
+            "empty_slot_bboxes": empty_bboxes,
+        })
+
+    _log(f"✅ [Grid Fallback] Analyzed {grid_size * grid_size} cells")
+    return raw_rows
+
 def _run_image_pipeline(frame: np.ndarray) -> tuple[np.ndarray, dict]:
     h, w = frame.shape[:2]
     _log(f"🖼️  Started image pipeline ({w}x{h})")
 
     detections = detect(frame)
-    _log(f"🎯 [YOLOv8] Detected {len(detections)} total items")
+    n_products = sum(1 for d in detections if d["class_name"] == "product")
+    n_empties  = sum(1 for d in detections if d["class_name"] == "empty_space")
+    _log(f"🎯 [YOLOv8 Dual Run] {n_products} products + {n_empties} empty spaces = {len(detections)} total")
+
+    # --- Grid fallback (Step 5): if YOLO finds < 3 boxes total, use grid analysis ---
+    if len(detections) < 3:
+        _log(f"⚠️  Only {len(detections)} detections — triggering grid fallback")
+        raw_rows = _grid_fallback(frame, grid_size=4)
+        report = analyze(raw_rows)
+        report["_raw_rows"] = raw_rows
+        annotated = draw_overlay(frame, report)
+        return annotated, report
 
     rows = detect_rows(detections, h)
     if not rows:
-        _log("⚠️  No rows detected — using fallback.")
+        _log("⚠️  No rows detected — using empty shelf fallback.")
         raw_rows = _build_empty_shelf_rows(h, w)
         report = analyze(raw_rows)
         report["_raw_rows"] = raw_rows
@@ -119,32 +186,57 @@ def _run_image_pipeline(frame: np.ndarray) -> tuple[np.ndarray, dict]:
         return annotated, report
 
     _log(f"📚 [Clustering] {len(rows)} shelf rows")
-    empty_counts, empty_bboxes = detect_empty_slots(rows, w)
+
+    # Gap-based empty detection needs ONLY product detections
+    # (empty_space boxes would fill gaps and mask real empties)
+    product_only_rows = [
+        [d for d in row if d.get("class_name") != "empty_space"]
+        for row in rows
+    ]
+    gap_counts, gap_bboxes = detect_empty_slots(product_only_rows, w)
 
     raw_rows = []
     _log("🤖 [Groq] Starting AI identification...")
     for row_idx, row in enumerate(rows):
-        row_dets = []
+        product_dets = []
+        yolo_empty_count = 0
+        yolo_empty_bboxes = []
+
         for det in row:
+            # --- Separate YOLO-detected empty spaces from products ---
+            if det.get("class_name") == "empty_space":
+                yolo_empty_count += 1
+                yolo_empty_bboxes.append(det["bbox"])
+                continue  # don't add to product detections
+
+            # --- Product identification via Groq (Step 4) ---
             x1, y1, x2, y2 = det["bbox"]
-            PAD = 10
-            crop = frame[max(0, y1-PAD):min(h, y2+PAD), max(0, x1-PAD):min(w, x2+PAD)]
             if (y2 - y1) < 15 or (x2 - x1) < 15:
                 det["product_name"] = "Small Item"
                 det["category"] = "Other"
+            elif det.get("confidence", 0) >= 0.80:
+                det["product_name"] = "Product"
+                det["category"] = "Other"
+                _log(f"   ⏩ Skipping Groq for high-confidence detection ({det['confidence']:.2f})")
             else:
+                PAD = 10
+                crop = frame[max(0, y1-PAD):min(h, y2+PAD), max(0, x1-PAD):min(w, x2+PAD)]
                 product_info = identify_product(crop)
                 det["product_name"] = product_info.get("product_name", "Unidentified")
                 det["category"] = product_info.get("category", "Other")
-            row_dets.append(det)
+            product_dets.append(det)
 
-        ec = empty_counts[row_idx] if row_idx < len(empty_counts) else 0
-        eb = empty_bboxes[row_idx] if row_idx < len(empty_bboxes) else []
+        # Merge YOLO empties + gap-based empties (avoid duplicates)
+        gc = gap_counts[row_idx] if row_idx < len(gap_counts) else 0
+        gb = gap_bboxes[row_idx] if row_idx < len(gap_bboxes) else []
+        total_empty = yolo_empty_count + gc
+        all_empty_bboxes = yolo_empty_bboxes + gb
+
         raw_rows.append({
             "row_id": row_idx,
-            "detections": row_dets,
-            "empty_slots": ec,
-            "empty_slot_bboxes": eb,
+            "detections": product_dets,
+            "empty_slots": total_empty,
+            "empty_slot_bboxes": all_empty_bboxes,
         })
     _log("✅ [Groq] Identification complete")
 

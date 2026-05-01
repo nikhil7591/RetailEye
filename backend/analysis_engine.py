@@ -114,6 +114,26 @@ def analyze(rows_with_products: list[dict]) -> dict:
         if r["alert"] in ("Critical", "Warning")
     ]
 
+    # --- Flat output arrays (pipeline spec Step 4) --------------------------
+    total_slots = total_products + total_empty
+    fill_pct = round((total_products / total_slots) * 100, 1) if total_slots > 0 else 0.0
+
+    flat_products: list[dict] = []
+    flat_empty: list[dict] = []
+
+    for row_data in rows_with_products:
+        for det in row_data.get("detections", []):
+            flat_products.append({
+                "name": det.get("product_name", "Unknown"),
+                "confidence": round(det.get("confidence", 0), 2),
+                "bbox": det.get("bbox", []),
+            })
+        for ebbox in row_data.get("empty_slot_bboxes", []):
+            flat_empty.append({
+                "confidence": 1.0,
+                "bbox": ebbox,
+            })
+
     return {
         "store_id": "store_001",
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -121,6 +141,14 @@ def analyze(rows_with_products: list[dict]) -> dict:
         "overall_alert": overall_alert,
         "total_products_detected": total_products,
         "total_empty_slots": total_empty,
+        "total_slots": total_slots,
+        "products": flat_products,
+        "empty_spaces": flat_empty,
+        "summary": {
+            "total_products": total_products,
+            "total_empty": total_empty,
+            "shelf_fill_percentage": fill_pct,
+        },
         "rows": report_rows,
         "restock_priority": restock_priority,
     }
