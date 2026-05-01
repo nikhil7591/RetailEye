@@ -82,7 +82,7 @@ export function KPICards({ metrics, historyItems = [] }) {
                 <card.icon className={`h-3.5 w-3.5 sm:h-5 sm:w-5 ${card.iconColor}`} />
               </div>
             </div>
-            
+
             <div className="mt-4 pt-2 h-14 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={card.chartData} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>

@@ -328,6 +328,9 @@ function HeroSection() {
                   src="/image.png"
                   alt="3D Smart Shelf & AI Robot"
                   className="w-full h-auto drop-shadow-2xl object-contain"
+                  fetchpriority="high"
+                  loading="eager"
+                  decoding="async"
                 />
               </div>
 
