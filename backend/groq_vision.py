@@ -11,6 +11,7 @@ import os
 import pathlib
 import re
 import time
+import random
 import traceback
 
 import cv2
@@ -24,9 +25,9 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 # ---------------------------------------------------------------------------
-# Circuit breaker — once rate-limited, skip all API calls until cooldown ends
+# Rate limiting configuration
 # ---------------------------------------------------------------------------
-_rate_limited_until: float = 0.0  # epoch timestamp; 0 = not limited
+MAX_RETRIES = 4
 
 # System prompt sent to Groq
 _IDENTIFICATION_PROMPT = (
@@ -161,46 +162,50 @@ def _parse_retry_seconds(error_msg: str) -> float:
 def _call_groq(base64_jpeg: str) -> dict:
     """
     Send a single base64-encoded JPEG to Groq Vision and return the
-    parsed JSON dict.  Raises on HTTP / network errors.
-    On 429 RateLimitError, sets the circuit breaker and re-raises.
+    parsed JSON dict. Implements exponential backoff with jitter on 429.
     """
-    global _rate_limited_until
     from groq import Groq, RateLimitError  # lazy import
 
     client = Groq(api_key=GROQ_API_KEY)
 
-    try:
-        response = client.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": _IDENTIFICATION_PROMPT,
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{base64_jpeg}",
+    for attempt in range(MAX_RETRIES):
+        try:
+            response = client.chat.completions.create(
+                model=GROQ_MODEL,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": _IDENTIFICATION_PROMPT,
                             },
-                        },
-                    ],
-                }
-            ],
-            max_tokens=256,
-            temperature=0.1,
-        )
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{base64_jpeg}",
+                                },
+                            },
+                        ],
+                    }
+                ],
+                max_tokens=256,
+                temperature=0.1,
+            )
 
-        raw_text = response.choices[0].message.content
-        return _parse_json_response(raw_text)
+            raw_text = response.choices[0].message.content
+            return _parse_json_response(raw_text)
 
-    except RateLimitError as e:
-        retry_secs = _parse_retry_seconds(str(e))
-        _rate_limited_until = time.time() + retry_secs
-        print(f"[groq_vision] ⛔ Rate limited — circuit breaker ON for {retry_secs:.0f}s")
-        raise  # let caller handle gracefully
+        except RateLimitError as e:
+            if attempt == MAX_RETRIES - 1:
+                print(f"[groq_vision] ⛔ Rate limit exceeded after {MAX_RETRIES} attempts.")
+                raise
+            
+            # Exponential backoff: 2^attempt seconds + up to 1s jitter
+            base_delay = min(_parse_retry_seconds(str(e)), 2 ** attempt)
+            sleep_time = base_delay + random.uniform(0.1, 1.0)
+            print(f"[groq_vision] ⏳ Rate limited — backoff {sleep_time:.2f}s (attempt {attempt+1}/{MAX_RETRIES})")
+            time.sleep(sleep_time)
 
 
 # ---------------------------------------------------------------------------
@@ -243,12 +248,6 @@ def identify_product(crop_image_np: np.ndarray) -> dict:
         print("[groq_vision] GROQ_API_KEY not set — returning fallback")
         return fallback
 
-    # Guard: circuit breaker tripped — skip API call entirely
-    if time.time() < _rate_limited_until:
-        remaining = int(_rate_limited_until - time.time())
-        print(f"[groq_vision] ⛔ Circuit breaker active — skipping ({remaining}s left)")
-        return fallback
-
     try:
         from groq import RateLimitError  # lazy import
 
@@ -275,7 +274,7 @@ def identify_product(crop_image_np: np.ndarray) -> dict:
         return result
 
     except RateLimitError:
-        # Circuit breaker already set by _call_groq — just return fallback
+        # Give up and return fallback after max retries
         return fallback
 
     except Exception:

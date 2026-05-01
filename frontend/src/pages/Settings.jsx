@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { CheckCircle2, AlertCircle, Save, Trash2, Server, Database, Activity, Sliders } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
-import { clearAllHistory } from "../services/api";
+import { BASE_URL, clearAllHistory, getSettings, saveSettings } from "../services/api";
 import { cn } from "../lib/utils";
 
 export function Settings() {
@@ -11,19 +11,48 @@ export function Settings() {
   const [critThreshold, setCritThreshold] = useState(40);
   const [warnThreshold, setWarnThreshold] = useState(70);
   const [saved, setSaved]               = useState(false);
+  const [saveMsg, setSaveMsg]           = useState(null);
   const [clearing, setClearing]         = useState(false);
   const [clearMsg, setClearMsg]         = useState(null);
   const [backendStatus, setBackendStatus] = useState("checking"); // checking | online | offline
 
   useEffect(() => {
-    fetch("http://localhost:8000/health")
+    fetch(`${BASE_URL}/health`)
       .then(r => r.ok ? setBackendStatus("online") : setBackendStatus("offline"))
       .catch(() => setBackendStatus("offline"));
   }, []);
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const settings = await getSettings();
+        setStoreName(settings.store_name ?? "RetailEye Store 001");
+        setStoreId(settings.store_id ?? "store_001");
+        setWarnThreshold(Number(settings.warn_threshold ?? 70));
+        setCritThreshold(Number(settings.crit_threshold ?? 40));
+      } catch (e) {
+        setSaveMsg(e?.message || "Failed to load settings");
+        setTimeout(() => setSaveMsg(null), 3000);
+      }
+    };
+    load();
+  }, []);
+
+  const handleSave = async () => {
+    setSaveMsg(null);
+    try {
+      await saveSettings({
+        store_name: storeName,
+        store_id: storeId,
+        warn_threshold: warnThreshold,
+        crit_threshold: critThreshold,
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      setSaveMsg(e?.message || "Failed to save settings");
+      setTimeout(() => setSaveMsg(null), 3000);
+    }
   };
 
   const handleClearHistory = async () => {
@@ -101,6 +130,7 @@ export function Settings() {
           >
             {saved ? <><CheckCircle2 className="h-4 w-4" /> Saved!</> : <><Save className="h-4 w-4" /> Save Changes</>}
           </Button>
+          {saveMsg && <p className="text-[11px] text-[#EF4444] font-medium">{saveMsg}</p>}
         </CardContent>
       </Card>
 
@@ -161,7 +191,7 @@ export function Settings() {
               </div>
               <div>
                 <p className="text-sm font-semibold text-[#334155]">Backend Server</p>
-                <p className="text-xs text-[#94A3B8] mt-0.5">http://localhost:8000</p>
+                <p className="text-xs text-[#94A3B8] mt-0.5">{BASE_URL}</p>
               </div>
             </div>
             <StatusDot status={backendStatus} />

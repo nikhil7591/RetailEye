@@ -86,7 +86,7 @@ def save_csv(report_dict: dict, path: str) -> str:
                 writer.writerow({
                     "timestamp": timestamp,
                     "store_id": store_id,
-                    "row_id": row.get("row_id", ""),
+                    "row_id": row.get("row_display", row.get("row_id", "")),
                     "zone_label": row.get("zone_label", ""),
                     "occupancy_percent": row.get("occupancy_percent", 0),
                     "alert": row.get("alert", ""),
@@ -99,7 +99,7 @@ def save_csv(report_dict: dict, path: str) -> str:
                     writer.writerow({
                         "timestamp": timestamp,
                         "store_id": store_id,
-                        "row_id": row.get("row_id", ""),
+                        "row_id": row.get("row_display", row.get("row_id", "")),
                         "zone_label": row.get("zone_label", ""),
                         "occupancy_percent": row.get("occupancy_percent", 0),
                         "alert": row.get("alert", ""),

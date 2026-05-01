@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { UploadCloud, CheckCircle2, AlertCircle, Loader2, Download, RotateCcw, Eye, ZoomIn, ZoomOut } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
-import { analyzeImage, analyzeVideo, getFileUrl, getDownloadUrl } from "../services/api";
+import { analyzeImage, analyzeVideo, getFileUrl, getDownloadUrl, BASE_URL } from "../services/api";
 import { cn } from "../lib/utils";
 
 const CATEGORY_COLORS = {
@@ -162,12 +162,12 @@ export function SingleAnalysis() {
             </div>
             <div className="flex gap-2">
               {result.report_json_url && (
-                <a href={result._id ? getDownloadUrl(result._id, "json") : `http://localhost:8000${result.report_json_url}`} download>
+                <a href={result._id ? getDownloadUrl(result._id, "json") : `${BASE_URL}${result.report_json_url}`} download>
                   <Button variant="outline" size="sm" className="gap-1 text-xs"><Download className="h-3.5 w-3.5" /> JSON</Button>
                 </a>
               )}
               {result.report_csv_url && (
-                <a href={result._id ? getDownloadUrl(result._id, "csv") : `http://localhost:8000${result.report_csv_url}`} download>
+                <a href={result._id ? getDownloadUrl(result._id, "csv") : `${BASE_URL}${result.report_csv_url}`} download>
                   <Button variant="outline" size="sm" className="gap-1 text-xs"><Download className="h-3.5 w-3.5" /> CSV</Button>
                 </a>
               )}
@@ -246,7 +246,7 @@ export function SingleAnalysis() {
                     return (
                       <div key={i}>
                         <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-xs font-semibold text-[#334155]">Row {row.row_id} — {row.zone_label}</span>
+                          <span className="text-xs font-semibold text-[#334155]">Row {row.row_display ?? row.row_id + 1} — {row.zone_label}</span>
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-bold" style={{ color: barColor }}>{occ}%</span>
                             <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide",

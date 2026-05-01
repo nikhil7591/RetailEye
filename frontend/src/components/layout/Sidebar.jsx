@@ -1,17 +1,21 @@
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "../../lib/utils";
-import { LayoutDashboard, History, FileText, Bell, Settings, Eye } from "lucide-react";
+import { LayoutDashboard, History, FileText, Bell, Settings, Eye, ScanLine, LogOut, Store, User } from "lucide-react";
+import { useAuth } from "../../contexts/AuthContext";
 
 export function Sidebar() {
   const location = useLocation();
 
   const navItems = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { name: "Analysis", href: "/dashboard/analysis", icon: ScanLine },
     { name: "History", href: "/dashboard/history", icon: History },
     { name: "Reports", href: "/dashboard/reports", icon: FileText },
     { name: "Alerts", href: "/dashboard/alerts", icon: Bell },
     { name: "Settings", href: "/dashboard/settings", icon: Settings },
   ];
+
+  const { user, logout, activeStore, changeStore } = useAuth();
 
   return (
     <div className="flex h-screen w-[260px] shrink-0 flex-col border-r border-[#E2E8F0] bg-[#FFFFFF]">
@@ -21,6 +25,21 @@ export function Sidebar() {
           Retail<span className="text-[#4F46E5]">Eye</span>
         </span>
       </Link>
+
+      <div className="px-4 mb-4">
+        <div className="flex items-center gap-2 px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl cursor-pointer hover:bg-[#F1F5F9] transition-colors relative group">
+          <Store className="h-4 w-4 text-[#64748B]" />
+          <select 
+            value={activeStore}
+            onChange={(e) => changeStore(e.target.value)}
+            className="bg-transparent text-sm font-semibold text-[#0F172A] outline-none appearance-none cursor-pointer w-full"
+          >
+            <option value="store_001">Store 001 - Main</option>
+            <option value="store_002">Store 002 - North</option>
+            <option value="store_003">Store 003 - South</option>
+          </select>
+        </div>
+      </div>
 
       <div className="flex-1 overflow-y-auto py-4 flex flex-col gap-1 px-4">
         {navItems.map((item) => {
@@ -48,7 +67,7 @@ export function Sidebar() {
         })}
       </div>
 
-      <div className="p-4 mb-2">
+      <div className="p-4 mb-2 flex flex-col gap-3">
         <div className="rounded-xl bg-[#FFFFFF] p-4 border border-[#E2E8F0] shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] flex flex-col">
           <span className="text-[11px] font-semibold text-[#94A3B8] mb-1.5">AI Status</span>
           <div className="flex items-center gap-2 mb-3">
@@ -64,6 +83,23 @@ export function Sidebar() {
             <path d="M0,24 L10,18 L20,20 L30,10 L40,15 L50,5 L60,12 L70,2 L80,8 L90,0 L100,6" fill="none" stroke="#4F46E5" strokeWidth="1.5" vectorEffect="non-scaling-stroke"/>
           </svg>
         </div>
+        
+        {user && (
+          <div className="flex items-center justify-between bg-[#F8FAFC] border border-[#E2E8F0] p-3 rounded-xl">
+            <div className="flex items-center gap-3 overflow-hidden">
+              <div className="bg-[#E0E7FF] text-[#4F46E5] h-8 w-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0">
+                {user.name ? user.name.charAt(0).toUpperCase() : <User className="h-4 w-4" />}
+              </div>
+              <div className="flex flex-col overflow-hidden">
+                <span className="text-xs font-bold text-[#0F172A] truncate">{user.name || "User"}</span>
+                <span className="text-[10px] text-[#64748B] truncate">{user.email}</span>
+              </div>
+            </div>
+            <button onClick={logout} className="text-[#94A3B8] hover:text-[#EF4444] transition-colors p-1.5 shrink-0" title="Logout">
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

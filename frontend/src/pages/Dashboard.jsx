@@ -18,14 +18,30 @@ import { cn } from "../lib/utils";
 // ── Helpers ──
 function mapRows(rows = []) {
   return rows.map((r, i) => ({
-    category: r.zone_label?.replace(" Zone", "") || `Row ${r.row_id}`,
+    category: r.zone_label?.replace(" Zone", "") || `Row ${r.row_display ?? r.row_id ?? i + 1}`,
     occupancy: r.occupancy_percent ?? 0,
     status: r.alert === "Critical" ? "CRIT" : r.alert === "Warning" ? "WARN" : "OK",
   }));
 }
 function mapSuggestions(rows = []) {
-  return rows.filter(r => r.alert !== "OK").sort((a, b) => a.occupancy_percent - b.occupancy_percent)
-    .map(r => ({ text: `${r.alert === "Critical" ? "🚨 Restock" : "⚠️ Replenish"} ${r.zone_label} — ${r.occupancy_percent}% occupancy` }));
+  const iconMap = {
+    Dairy: "Milk",
+    Beverages: "Droplets",
+    Snacks: "Coffee",
+    "Personal Care": "Heart",
+    Other: "Package",
+  };
+  return rows
+    .filter((r) => r.alert !== "OK")
+    .sort((a, b) => a.occupancy_percent - b.occupancy_percent)
+    .map((r) => {
+      const category = r.zone_label?.replace(" Zone", "") || "Other";
+      return {
+        text: `${r.alert === "Critical" ? "Restock" : "Replenish"} ${r.zone_label} — ${r.occupancy_percent}% occupancy`,
+        category: category,
+        icon: iconMap[category] || "Package",
+      };
+    });
 }
 function mapPriority(arr = []) {
   const C = ["#EF4444", "#F59E0B", "#22C55E"];
@@ -276,14 +292,26 @@ export function Dashboard() {
 
   const reportRows = latestResult?.report?.rows ?? [];
   const imageSrc = latestResult?.processed_image_url ? getFileUrl(latestResult.processed_image_url) : null;
+  const detections = [
+    ...(latestResult?.report?.products ?? []).map((p) => ({
+      bbox: p.bbox,
+      label: p.name,
+      category: p.category || "Other",
+    })),
+    ...(latestResult?.report?.empty_spaces ?? []).map((e) => ({
+      bbox: e.bbox,
+      label: "Empty",
+      category: "Empty Slot",
+    })),
+  ];
 
   return (
     <div className="flex flex-col gap-6 pb-8">
-      <KPICards metrics={metrics} />
+      <KPICards metrics={metrics} historyItems={history} />
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-6">
-          <OutputPreview imageSrc={imageSrc} detections={[]} isAnalyzed={!!imageSrc} />
+          <OutputPreview imageSrc={imageSrc} detections={detections} isAnalyzed={!!imageSrc} />
         </div>
         <div className="lg:col-span-3">
           <RowBreakdown rows={mapRows(reportRows)} />
@@ -298,7 +326,7 @@ export function Dashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-4"><RestockSuggestions items={mapSuggestions(reportRows)} /></div>
-        <div className="lg:col-span-4"><Heatmap /></div>
+        <div className="lg:col-span-4"><Heatmap rows={reportRows} /></div>
         <div className="lg:col-span-4"><RestockPriority priorityData={mapPriority(latestResult?.report?.restock_priority ?? [])} /></div>
       </div>
 

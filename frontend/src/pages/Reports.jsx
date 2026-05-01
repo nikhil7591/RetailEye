@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { BarChart2, Download, TrendingUp, TrendingDown } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "../components/ui/Card";
-import { getStats, getHistory } from "../services/api";
+import { getStats, getHistory, getDownloadUrl } from "../services/api";
 import { Loader } from "../components/ui/Loader";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from "recharts";
 
@@ -155,12 +155,12 @@ export function Reports() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
-                        <a href={`http://localhost:8000/download/${item._id}/json`} download>
+                        <a href={getDownloadUrl(item._id, "json")} download>
                           <button className="text-[10px] font-bold px-2 py-1 rounded border border-[#E2E8F0] hover:bg-[#EEF2FF] text-[#4F46E5] transition-colors">
                             JSON
                           </button>
                         </a>
-                        <a href={`http://localhost:8000/download/${item._id}/csv`} download>
+                        <a href={getDownloadUrl(item._id, "csv")} download>
                           <button className="text-[10px] font-bold px-2 py-1 rounded border border-[#E2E8F0] hover:bg-[#EEF2FF] text-[#4F46E5] transition-colors">
                             CSV
                           </button>

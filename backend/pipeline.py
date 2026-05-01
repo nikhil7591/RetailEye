@@ -14,7 +14,6 @@ and a structured JSON report is generated.
 """
 
 import argparse
-import base64
 import json
 import os
 import sys
@@ -24,13 +23,13 @@ import numpy as np
 from dotenv import load_dotenv
 from ultralytics import YOLO
 
+from groq_vision import identify_product
+
 # ---------------------------------------------------------------------------
 # Environment
 # ---------------------------------------------------------------------------
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 # ---------------------------------------------------------------------------
 # Model loading
@@ -42,62 +41,6 @@ model_empty = YOLO(os.path.join(_MODEL_DIR, "empty.pt"))
 
 print(f"[pipeline] ✅ Product model classes: {model_product.names}")
 print(f"[pipeline] ✅ Empty model classes:   {model_empty.names}")
-
-# ---------------------------------------------------------------------------
-# Groq Vision — Product Identification
-# ---------------------------------------------------------------------------
-
-def crop_to_base64(image: np.ndarray, box) -> str:
-    """Crop a bounding box region from image and convert to base64 JPEG."""
-    x1, y1, x2, y2 = map(int, box.xyxy[0])
-    h, w = image.shape[:2]
-    x1, y1 = max(0, x1), max(0, y1)
-    x2, y2 = min(w, x2), min(h, y2)
-    crop = image[y1:y2, x1:x2]
-    if crop.size == 0:
-        return ""
-    _, buffer = cv2.imencode('.jpg', crop)
-    return base64.b64encode(buffer).decode('utf-8')
-
-
-def identify_product(base64_img: str) -> str:
-    """Send a base64 product crop to Groq Vision for identification."""
-    if not GROQ_API_KEY or not base64_img:
-        return "Unknown"
-
-    try:
-        from groq import Groq
-
-        client = Groq(api_key=GROQ_API_KEY)
-        response = client.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[{
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/jpeg;base64,{base64_img}"
-                        }
-                    },
-                    {
-                        "type": "text",
-                        "text": (
-                            "This is a product on an Indian retail shelf. "
-                            "Identify the product name and brand in 1-2 words only. "
-                            "If unclear, say Unknown."
-                        )
-                    }
-                ]
-            }],
-            max_tokens=50,
-            temperature=0.1,
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        print(f"[pipeline] Groq API error: {e}")
-        return "Unknown"
-
 
 # ---------------------------------------------------------------------------
 # Grid Fallback (Step 5)
@@ -142,8 +85,9 @@ def grid_fallback(image: np.ndarray, grid_size: int = 4) -> tuple[list[dict], li
                     if conf >= 0.80:
                         name = "Product"
                     else:
-                        b64 = crop_to_base64(image, box)
-                        name = identify_product(b64) if b64 else "Unknown"
+                        crop = cell[int(by1):int(by2), int(bx1):int(bx2)]
+                        product_info = identify_product(crop)
+                        name = product_info.get("product_name", "Unidentified Product")
 
                     all_products.append({
                         "name": name,
@@ -208,8 +152,10 @@ def analyze_shelf(image_path: str) -> dict:
                 name = "Product"
                 print(f"   ⏩ High confidence ({conf:.2f}) — skipping Groq")
             else:
-                b64 = crop_to_base64(image, box)
-                name = identify_product(b64) if b64 else "Unknown"
+                x1, y1, x2, y2 = map(int, box.xyxy[0])
+                crop = image[max(0, y1):max(0, y2), max(0, x1):max(0, x2)]
+                product_info = identify_product(crop)
+                name = product_info.get("product_name", "Unidentified Product")
                 print(f"   🤖 Groq identified: {name} (conf={conf:.2f})")
 
             x1, y1, x2, y2 = map(int, box.xyxy[0])

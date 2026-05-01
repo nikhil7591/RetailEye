@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { UploadCloud, X, Loader2, CheckCircle2, AlertCircle, FileImage, Download } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
-import { analyzeImage, getFileUrl } from "../services/api";
+import { analyzeImage, getFileUrl, getDownloadUrl } from "../services/api";
 import { cn } from "../lib/utils";
 
 const MAX_FILES = 8;
@@ -176,7 +176,7 @@ export function BatchAnalysis() {
                       </td>
                       <td className="py-3 text-right">
                         {r._id && (
-                          <a href={`http://localhost:8000/download/${r._id}/csv`} download>
+                          <a href={getDownloadUrl(r._id, "csv")} download>
                             <button className="p-1.5 text-[#94A3B8] hover:text-[#4F46E5] transition-colors">
                               <Download className="h-4 w-4" />
                             </button>

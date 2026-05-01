@@ -30,7 +30,7 @@ def _build_empty_shelf_rows(frame_height: int, frame_width: int, row_count: int 
     return rows
 
 
-def _process_single_frame(frame: np.ndarray) -> tuple[np.ndarray, dict]:
+def _process_single_frame(frame: np.ndarray, settings: dict) -> tuple[np.ndarray, dict]:
     """
     Run the full dual-run pipeline on one frame:
     detect (2 runs) → identify → analyze → overlay.
@@ -45,7 +45,12 @@ def _process_single_frame(frame: np.ndarray) -> tuple[np.ndarray, dict]:
     rows = detect_rows(detections, h)
     if not rows:
         raw_rows = _build_empty_shelf_rows(h, w)
-        report = analyze(raw_rows)
+        report = analyze(
+            raw_rows,
+            settings.get("warn_threshold", 70),
+            settings.get("crit_threshold", 40),
+            settings.get("store_id", "store_001"),
+        )
         report["_raw_rows"] = raw_rows
         annotated = draw_overlay(frame, report)
         return annotated, report
@@ -101,7 +106,12 @@ def _process_single_frame(frame: np.ndarray) -> tuple[np.ndarray, dict]:
         })
 
     # 5. Analyze
-    report = analyze(raw_rows)
+    report = analyze(
+        raw_rows,
+        settings.get("warn_threshold", 70),
+        settings.get("crit_threshold", 40),
+        settings.get("store_id", "store_001"),
+    )
     report["_raw_rows"] = raw_rows  # attach for overlay drawing
 
     # 6. Draw overlay
@@ -123,17 +133,24 @@ def _process_frame_yolo_only(frame: np.ndarray, existing_report: dict) -> np.nda
     # Build raw_rows using existing product names from report (no Groq call)
     raw_rows = []
     report_rows = existing_report.get("rows", [])
+    report_raw_rows = existing_report.get("_raw_rows", [])
 
     for row_idx, row in enumerate(rows):
         row_report = report_rows[row_idx] if row_idx < len(report_rows) else {}
-        products = row_report.get("products", [])
+        row_raw = report_raw_rows[row_idx] if row_idx < len(report_raw_rows) else {}
+        existing_dets = row_raw.get("detections", [])
+
+        sorted_row = sorted(row, key=lambda d: d.get("bbox", [0, 0, 0, 0])[0])
+        sorted_existing = sorted(existing_dets, key=lambda d: d.get("bbox", [0, 0, 0, 0])[0])
 
         row_dets = []
-        for det_idx, det in enumerate(row):
-            # Reuse product name from existing report if available
-            if det_idx < len(products):
-                det["product_name"] = products[det_idx]["name"]
-                det["category"] = row_report.get("zone_label", "Other Zone").replace(" Zone", "")
+        for det_idx, det in enumerate(sorted_row):
+            if det_idx < len(sorted_existing):
+                det["product_name"] = sorted_existing[det_idx].get("product_name", "Product")
+                det["category"] = sorted_existing[det_idx].get(
+                    "category",
+                    row_report.get("zone_label", "Other Zone").replace(" Zone", ""),
+                )
             else:
                 det["product_name"] = "Product"
                 det["category"] = "Other"
@@ -152,7 +169,7 @@ def _process_frame_yolo_only(frame: np.ndarray, existing_report: dict) -> np.nda
     return draw_overlay(frame, overlay_report)
 
 
-def process_video(input_path: str, output_path: str) -> dict:
+def process_video(input_path: str, output_path: str, settings: dict | None = None) -> dict:
     """
     Process a video file through the RetailEye pipeline.
 
@@ -174,6 +191,8 @@ def process_video(input_path: str, output_path: str) -> dict:
     dict
         Analysis report from the last processed frame.
     """
+    settings = settings or {}
+
     cap = cv2.VideoCapture(input_path)
     if not cap.isOpened():
         raise RuntimeError(f"Cannot open video: {input_path}")
@@ -201,7 +220,7 @@ def process_video(input_path: str, output_path: str) -> dict:
         if frame_idx % 3 == 0:
             if not groq_done:
                 # Full pipeline with Groq on first processed frame only
-                annotated, report = _process_single_frame(frame)
+                annotated, report = _process_single_frame(frame, settings)
                 last_report = report
                 groq_done = True
                 print(f"  frame {frame_idx}/{total_frames} — full pipeline (Groq included)")

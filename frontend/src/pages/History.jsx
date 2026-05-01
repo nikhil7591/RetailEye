@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Search, Filter, Trash2, Eye, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
-import { getHistory, deleteHistoryItem, getFileUrl } from "../services/api";
+import { getHistory, deleteHistoryItem, getFileUrl, getDownloadUrl } from "../services/api";
 import { Loader } from "../components/ui/Loader";
 import { cn } from "../lib/utils";
 
@@ -144,7 +144,7 @@ export function History() {
                           <Eye className="h-4 w-4" />
                         </button>
                         {row._id && (
-                          <a href={`http://localhost:8000/download/${row._id}/csv`} download onClick={e => e.stopPropagation()}>
+                          <a href={getDownloadUrl(row._id, "csv")} download onClick={e => e.stopPropagation()}>
                             <button className="p-1.5 rounded hover:bg-[#EEF2FF] text-[#94A3B8] hover:text-[#4F46E5] transition-colors">
                               <Download className="h-4 w-4" />
                             </button>
@@ -218,7 +218,7 @@ export function History() {
               {selected.report?.rows?.map((row, i) => (
                 <div key={i}>
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-semibold text-[#334155]">Row {row.row_id} — {row.zone_label}</span>
+                    <span className="text-xs font-semibold text-[#334155]">Row {row.row_display ?? row.row_id} — {row.zone_label}</span>
                     <span className="text-xs font-bold text-[#4F46E5]">{row.occupancy_percent}%</span>
                   </div>
                   <div className="h-2 bg-[#F1F5F9] rounded-full overflow-hidden">
@@ -229,10 +229,10 @@ export function History() {
               <div className="flex gap-2 pt-2">
                 {selected._id && (
                   <>
-                    <a href={`http://localhost:8000/download/${selected._id}/json`} download className="flex-1">
+                    <a href={getDownloadUrl(selected._id, "json")} download className="flex-1">
                       <Button variant="outline" className="w-full gap-2 text-xs"><Download className="h-3.5 w-3.5" /> JSON</Button>
                     </a>
-                    <a href={`http://localhost:8000/download/${selected._id}/csv`} download className="flex-1">
+                    <a href={getDownloadUrl(selected._id, "csv")} download className="flex-1">
                       <Button variant="outline" className="w-full gap-2 text-xs"><Download className="h-3.5 w-3.5" /> CSV</Button>
                     </a>
                   </>

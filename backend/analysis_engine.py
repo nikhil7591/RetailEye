@@ -13,11 +13,11 @@ _ALERT_OK = 70
 _ALERT_WARNING = 40
 
 
-def _alert_for_occupancy(pct: float) -> str:
+def _alert_for_occupancy(pct: float, warn_threshold: float, crit_threshold: float) -> str:
     """Return alert level string for a given occupancy percentage."""
-    if pct > _ALERT_OK:
+    if pct > warn_threshold:
         return "OK"
-    elif pct >= _ALERT_WARNING:
+    elif pct >= crit_threshold:
         return "Warning"
     else:
         return "Critical"
@@ -31,7 +31,12 @@ def _worst_alert(alerts: list[str]) -> str:
     return min(alerts, key=lambda a: severity.get(a, 2))
 
 
-def analyze(rows_with_products: list[dict]) -> dict:
+def analyze(
+    rows_with_products: list[dict],
+    warn_threshold: float = _ALERT_OK,
+    crit_threshold: float = _ALERT_WARNING,
+    store_id: str = "store_001",
+) -> dict:
     """
     Build a full shelf-analysis report.
 
@@ -74,7 +79,7 @@ def analyze(rows_with_products: list[dict]) -> dict:
         occupancy_pct = round((num_products / total_slots) * 100, 1) if total_slots > 0 else 0.0
 
         # --- Alert ----------------------------------------------------------
-        alert = _alert_for_occupancy(occupancy_pct)
+        alert = _alert_for_occupancy(occupancy_pct, warn_threshold, crit_threshold)
         all_alerts.append(alert)
 
         # --- Product quantities ---------------------------------------------
@@ -85,7 +90,8 @@ def analyze(rows_with_products: list[dict]) -> dict:
         ]
 
         report_rows.append({
-            "row_id": row_id + 1,
+            "row_id": row_id,
+            "row_display": row_id + 1,
             "zone_label": zone_label,
             "occupancy_percent": occupancy_pct,
             "alert": alert,
@@ -109,7 +115,7 @@ def analyze(rows_with_products: list[dict]) -> dict:
     # --- Restock priority (ascending occupancy, Critical first) -------------
     sorted_rows = sorted(report_rows, key=lambda r: r["occupancy_percent"])
     restock_priority = [
-        f"Row {r['row_id']} - {r['zone_label']} ({r['occupancy_percent']}%)"
+        f"Row {r.get('row_display', r.get('row_id', 0) + 1)} - {r['zone_label']} ({r['occupancy_percent']}%)"
         for r in sorted_rows
         if r["alert"] in ("Critical", "Warning")
     ]
@@ -126,6 +132,7 @@ def analyze(rows_with_products: list[dict]) -> dict:
             flat_products.append({
                 "name": det.get("product_name", "Unknown"),
                 "confidence": round(det.get("confidence", 0), 2),
+                "category": det.get("category", "Other"),
                 "bbox": det.get("bbox", []),
             })
         for ebbox in row_data.get("empty_slot_bboxes", []):
@@ -135,7 +142,7 @@ def analyze(rows_with_products: list[dict]) -> dict:
             })
 
     return {
-        "store_id": "store_001",
+        "store_id": store_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "overall_occupancy": overall_occ,
         "overall_alert": overall_alert,

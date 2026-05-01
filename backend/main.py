@@ -2,6 +2,7 @@
 RetailEye — FastAPI Backend (with MongoDB persistence)
 """
 
+import asyncio
 import os
 import glob
 import shutil
@@ -10,17 +11,19 @@ import traceback
 import uuid
 import time
 import math
+import pathlib
 
 import cv2
 import numpy as np
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 from datetime import datetime, timezone
+from pydantic import BaseModel
 
 from detector import detect, detect_rows, detect_empty_slots
 from groq_vision import identify_product
@@ -28,20 +31,30 @@ from analysis_engine import analyze
 from overlay import draw_overlay
 from report_generator import save_json, save_csv
 from video_processor import process_video
+from auth import hash_password, verify_password, create_access_token, get_current_user
 
 # ---------------------------------------------------------------------------
 # Load environment variables
 # ---------------------------------------------------------------------------
-load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+_BACKEND_ENV = pathlib.Path(__file__).resolve().parent / ".env"
+_ROOT_ENV = pathlib.Path(__file__).resolve().parent.parent / ".env"
+load_dotenv(_BACKEND_ENV)
+load_dotenv(_ROOT_ENV)
 
 # ---------------------------------------------------------------------------
 # App setup
 # ---------------------------------------------------------------------------
 app = FastAPI(title="RetailEye API", version="2.0.0")
 
+CORS_ORIGINS = [
+    o.strip()
+    for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
+    if o.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -66,14 +79,62 @@ db = None
 @app.on_event("startup")
 async def startup_db():
     global mongo_client, db
+    # Environment validation
+    if not os.getenv("GROQ_API_KEY"):
+        _log("⚠️  WARNING: GROQ_API_KEY is not set — product identification will return fallback results")
+    if MONGO_URI == "mongodb://localhost:27017":
+        _log("ℹ️  Using default local MongoDB URI. Set MONGO_URI for production.")
     mongo_client = AsyncIOMotorClient(MONGO_URI)
     db = mongo_client[DB_NAME]
     _log(f"✅ [MongoDB] Connected to {MONGO_URI} / {DB_NAME}")
+    # Create indexes for query performance
+    await db.users.create_index([("email", 1)], unique=True)
+    await db.analyses.create_index([("created_at", -1)])
+    await db.analyses.create_index([("report.overall_alert", 1)])
+    await db.analyses.create_index([("store_id", 1), ("created_at", -1)])
+    _log("✅ [MongoDB] Indexes ensured")
+    asyncio.create_task(_ttl_cleanup_loop())
 
 @app.on_event("shutdown")
 async def shutdown_db():
     if mongo_client:
         mongo_client.close()
+
+async def _ttl_cleanup_loop():
+    """Background task to clean up old output files and orphaned files every 24h"""
+    while True:
+        try:
+            now = time.time()
+            thirty_days = 30 * 24 * 60 * 60
+            deleted_count = 0
+            
+            for file in os.listdir(OUTPUTS_DIR):
+                file_path = os.path.join(OUTPUTS_DIR, file)
+                if os.path.isfile(file_path):
+                    # Check age
+                    if now - os.path.getmtime(file_path) > thirty_days:
+                        # Check if file is still referenced in DB
+                        rel_path = f"/outputs/{file}"
+                        in_use = await db.analyses.find_one({
+                            "$or": [
+                                {"processed_image_url": rel_path},
+                                {"report_json_url": rel_path},
+                                {"report_csv_url": rel_path}
+                            ]
+                        })
+                        if not in_use:
+                            try:
+                                os.remove(file_path)
+                                deleted_count += 1
+                            except OSError:
+                                pass
+            
+            if deleted_count > 0:
+                _log(f"🧹 [Cleanup] Removed {deleted_count} old orphaned files.")
+        except Exception as e:
+            _log(f"⚠️ [Cleanup] Error during file cleanup: {e}")
+            
+        await asyncio.sleep(86400) # Sleep for 24 hours
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -87,6 +148,26 @@ def _oid_to_str(doc: dict) -> dict:
     if doc and "_id" in doc:
         doc["_id"] = str(doc["_id"])
     return doc
+
+DEFAULT_SETTINGS = {
+    "store_name": "RetailEye Store 001",
+    "store_id": "store_001",
+    "warn_threshold": 70,
+    "crit_threshold": 40,
+}
+
+def _normalize_settings(doc: dict | None) -> dict:
+    if not doc:
+        return dict(DEFAULT_SETTINGS)
+    clean = dict(DEFAULT_SETTINGS)
+    for key in DEFAULT_SETTINGS:
+        if key in doc and doc[key] is not None:
+            clean[key] = doc[key]
+    return clean
+
+async def _get_settings() -> dict:
+    doc = await db.settings.find_one({"_id": "global"})
+    return _normalize_settings(doc)
 
 def _build_empty_shelf_rows(frame_height: int, frame_width: int, row_count: int = 3) -> list[dict]:
     rows: list[dict] = []
@@ -158,9 +239,13 @@ def _grid_fallback(frame: np.ndarray, grid_size: int = 4) -> list[dict]:
     _log(f"✅ [Grid Fallback] Analyzed {grid_size * grid_size} cells")
     return raw_rows
 
-def _run_image_pipeline(frame: np.ndarray) -> tuple[np.ndarray, dict]:
+def _run_image_pipeline(frame: np.ndarray, settings: dict) -> tuple[np.ndarray, dict]:
     h, w = frame.shape[:2]
     _log(f"🖼️  Started image pipeline ({w}x{h})")
+
+    warn_threshold = settings.get("warn_threshold", DEFAULT_SETTINGS["warn_threshold"])
+    crit_threshold = settings.get("crit_threshold", DEFAULT_SETTINGS["crit_threshold"])
+    store_id = settings.get("store_id", DEFAULT_SETTINGS["store_id"])
 
     detections = detect(frame)
     n_products = sum(1 for d in detections if d["class_name"] == "product")
@@ -171,7 +256,7 @@ def _run_image_pipeline(frame: np.ndarray) -> tuple[np.ndarray, dict]:
     if len(detections) < 3:
         _log(f"⚠️  Only {len(detections)} detections — triggering grid fallback")
         raw_rows = _grid_fallback(frame, grid_size=4)
-        report = analyze(raw_rows)
+        report = analyze(raw_rows, warn_threshold, crit_threshold, store_id)
         report["_raw_rows"] = raw_rows
         annotated = draw_overlay(frame, report)
         return annotated, report
@@ -180,7 +265,7 @@ def _run_image_pipeline(frame: np.ndarray) -> tuple[np.ndarray, dict]:
     if not rows:
         _log("⚠️  No rows detected — using empty shelf fallback.")
         raw_rows = _build_empty_shelf_rows(h, w)
-        report = analyze(raw_rows)
+        report = analyze(raw_rows, warn_threshold, crit_threshold, store_id)
         report["_raw_rows"] = raw_rows
         annotated = draw_overlay(frame, report)
         return annotated, report
@@ -240,7 +325,7 @@ def _run_image_pipeline(frame: np.ndarray) -> tuple[np.ndarray, dict]:
         })
     _log("✅ [Groq] Identification complete")
 
-    report = analyze(raw_rows)
+    report = analyze(raw_rows, warn_threshold, crit_threshold, store_id)
     report["_raw_rows"] = raw_rows
     annotated = draw_overlay(frame, report)
     return annotated, report
@@ -257,6 +342,56 @@ def _compute_shelf_score(report: dict) -> int:
     return min(100, int(round(base)))
 
 # ---------------------------------------------------------------------------
+# Auth Routes
+# ---------------------------------------------------------------------------
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+    name: str
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+@app.post("/auth/register")
+async def register(req: RegisterRequest):
+    if await db.users.find_one({"email": req.email}):
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    user_doc = {
+        "email": req.email,
+        "name": req.name,
+        "password_hash": hash_password(req.password),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    result = await db.users.insert_one(user_doc)
+    
+    token = create_access_token({"sub": str(result.inserted_id)})
+    return {"token": token, "user": {"id": str(result.inserted_id), "email": req.email, "name": req.name}}
+
+@app.post("/auth/login")
+async def login(req: LoginRequest):
+    user = await db.users.find_one({"email": req.email})
+    if not user or not verify_password(req.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    
+    token = create_access_token({"sub": str(user["_id"])})
+    return {"token": token, "user": {"id": str(user["_id"]), "email": user["email"], "name": user.get("name", "")}}
+
+# ---------------------------------------------------------------------------
+# Routes — Settings
+# ---------------------------------------------------------------------------
+@app.get("/settings")
+async def get_settings_route(user_id: str = Depends(get_current_user)):
+    return await _get_settings()
+
+@app.post("/settings")
+async def update_settings_route(settings: dict, user_id: str = Depends(get_current_user)):
+    await db.settings.replace_one({}, settings, upsert=True)
+    return {"status": "saved"}
+
+
+# ---------------------------------------------------------------------------
 # Routes — Analysis
 # ---------------------------------------------------------------------------
 @app.get("/health")
@@ -265,7 +400,7 @@ async def health():
 
 
 @app.post("/analyze/image")
-async def analyze_image(file: UploadFile = File(...)):
+async def analyze_image(file: UploadFile = File(...), store_id: str = Query(None), user_id: str = Depends(get_current_user)):
     _log(f"📥 Received image: {file.filename}")
     try:
         contents = await file.read()
@@ -274,7 +409,10 @@ async def analyze_image(file: UploadFile = File(...)):
         if frame is None:
             raise ValueError("Could not decode image")
 
-        annotated, report = _run_image_pipeline(frame)
+        settings = await _get_settings()
+        if store_id:
+            settings["store_id"] = store_id
+        annotated, report = _run_image_pipeline(frame, settings)
 
         uid = uuid.uuid4().hex[:8]
         out_name = f"processed_{uid}.jpg"
@@ -290,13 +428,17 @@ async def analyze_image(file: UploadFile = File(...)):
 
         # Persist to MongoDB
         doc = {
+            "user_id": user_id,
             "filename": file.filename,
             "file_type": "image",
+            "store_id": clean_report.get("store_id", settings.get("store_id", "store_001")),
             "processed_image_url": f"/outputs/{out_name}",
             "report_json_url": f"/outputs/{json_name}",
             "report_csv_url": f"/outputs/{csv_name}",
             "shelf_score": shelf_score,
             "report": clean_report,
+            "alert_resolved": False,
+            "resolved_at": None,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         result = await db.analyses.insert_one(doc)
@@ -324,7 +466,7 @@ async def analyze_image(file: UploadFile = File(...)):
 
 
 @app.post("/analyze/video")
-async def analyze_video(file: UploadFile = File(...)):
+async def analyze_video(file: UploadFile = File(...), store_id: str = Query(None), user_id: str = Depends(get_current_user)):
     _log(f"🎬 Received video: {file.filename}")
     try:
         suffix = os.path.splitext(file.filename or "video.mp4")[1] or ".mp4"
@@ -337,7 +479,10 @@ async def analyze_video(file: UploadFile = File(...)):
         json_name = f"report_{uid}.json"
         csv_name  = f"report_{uid}.csv"
 
-        report = process_video(tmp.name, os.path.join(OUTPUTS_DIR, out_name))
+        settings = await _get_settings()
+        if store_id:
+            settings["store_id"] = store_id
+        report = await asyncio.to_thread(process_video, tmp.name, os.path.join(OUTPUTS_DIR, out_name), settings)
         os.unlink(tmp.name)
 
         clean_report = {k: v for k, v in report.items() if not k.startswith("_")}
@@ -347,13 +492,17 @@ async def analyze_video(file: UploadFile = File(...)):
         shelf_score = _compute_shelf_score(clean_report)
 
         doc = {
+            "user_id": user_id,
             "filename": file.filename,
             "file_type": "video",
+            "store_id": clean_report.get("store_id", settings.get("store_id", "store_001")),
             "processed_video_url": f"/outputs/{out_name}",
             "report_json_url": f"/outputs/{json_name}",
             "report_csv_url": f"/outputs/{csv_name}",
             "shelf_score": shelf_score,
             "report": clean_report,
+            "alert_resolved": False,
+            "resolved_at": None,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         result = await db.analyses.insert_one(doc)
@@ -385,42 +534,73 @@ async def analyze_video(file: UploadFile = File(...)):
 # Routes — History (MongoDB CRUD)
 # ---------------------------------------------------------------------------
 @app.get("/history")
-async def get_history(limit: int = 50, skip: int = 0):
-    cursor = db.analyses.find({}, {"report._raw_rows": 0}).sort("created_at", -1).skip(skip).limit(limit)
+async def get_history(limit: int = 50, skip: int = 0, store_id: str = Query(None), user_id: str = Depends(get_current_user)):
+    query = {"user_id": user_id}
+    if store_id:
+        query["store_id"] = store_id
+    cursor = db.analyses.find(query, {"report._raw_rows": 0}).sort("created_at", -1).skip(skip).limit(limit)
     docs = []
     async for doc in cursor:
         docs.append(_oid_to_str(doc))
-    total = await db.analyses.count_documents({})
+    total = await db.analyses.count_documents(query)
     return JSONResponse({"total": total, "items": docs})
 
 
 @app.get("/history/{analysis_id}")
-async def get_history_item(analysis_id: str):
+async def get_history_item(analysis_id: str, user_id: str = Depends(get_current_user)):
     try:
         oid = ObjectId(analysis_id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid ID format")
-    doc = await db.analyses.find_one({"_id": oid})
+    doc = await db.analyses.find_one({"_id": oid, "user_id": user_id})
     if not doc:
         raise HTTPException(status_code=404, detail="Analysis not found")
     return JSONResponse(_oid_to_str(doc))
 
 
-@app.delete("/history/{analysis_id}")
-async def delete_history_item(analysis_id: str):
+@app.patch("/history/{analysis_id}/resolve")
+async def resolve_history_alert(analysis_id: str, user_id: str = Depends(get_current_user)):
     try:
         oid = ObjectId(analysis_id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid ID format")
-    result = await db.analyses.delete_one({"_id": oid})
-    if result.deleted_count == 0:
+    result = await db.analyses.update_one(
+        {"_id": oid, "user_id": user_id},
+        {"$set": {"alert_resolved": True, "resolved_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Analysis not found")
+    return JSONResponse({"status": "resolved", "id": analysis_id})
+
+
+@app.delete("/history/{analysis_id}")
+async def delete_history_item(analysis_id: str, user_id: str = Depends(get_current_user)):
+    try:
+        oid = ObjectId(analysis_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid ID format")
+    # Fetch doc first to clean up output files
+    doc = await db.analyses.find_one({"_id": oid, "user_id": user_id})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+    # Delete associated output files from disk
+    for url_key in ("processed_image_url", "processed_video_url", "report_json_url", "report_csv_url"):
+        rel_path = doc.get(url_key, "")
+        if rel_path:
+            abs_path = os.path.join(os.path.dirname(__file__), rel_path.lstrip("/"))
+            if os.path.isfile(abs_path):
+                try:
+                    os.remove(abs_path)
+                    _log(f"🗑️  Deleted file: {abs_path}")
+                except OSError:
+                    pass
+    await db.analyses.delete_one({"_id": oid, "user_id": user_id})
     return JSONResponse({"status": "deleted", "id": analysis_id})
 
 
 @app.delete("/history")
-async def clear_all_history():
-    result = await db.analyses.delete_many({})
+async def clear_all_history(user_id: str = Depends(get_current_user)):
+    result = await db.analyses.delete_many({"user_id": user_id})
     return JSONResponse({"status": "cleared", "deleted_count": result.deleted_count})
 
 
@@ -428,8 +608,12 @@ async def clear_all_history():
 # Routes — Notifications
 # ---------------------------------------------------------------------------
 @app.get("/notifications")
-async def get_notifications(limit: int = 10):
-    query = {"report.overall_alert": {"$in": ["Critical", "Warning"]}}
+async def get_notifications(user_id: str = Depends(get_current_user), limit: int = 10):
+    query = {
+        "user_id": user_id,
+        "report.overall_alert": {"$in": ["Critical", "Warning"]},
+        "alert_resolved": {"$ne": True},
+    }
     cursor = db.analyses.find(query, {"report._raw_rows": 0}).sort("created_at", -1).limit(limit)
     items = []
     async for doc in cursor:
@@ -456,7 +640,7 @@ async def get_notifications(limit: int = 10):
 # Routes — Stats (for Dashboard KPIs)
 # ---------------------------------------------------------------------------
 @app.get("/stats")
-async def get_stats():
+async def get_stats(user_id: str = Depends(get_current_user)):
     total = await db.analyses.count_documents({})
     if total == 0:
         return JSONResponse({
@@ -495,34 +679,46 @@ async def get_stats():
 
 
 # ---------------------------------------------------------------------------
-# Routes — Downloads (legacy + by ID)
+# Routes — Heatmap Stats
 # ---------------------------------------------------------------------------
-@app.get("/download/json")
-async def download_json():
-    files = sorted(glob.glob(os.path.join(OUTPUTS_DIR, "report_*.json")), key=os.path.getmtime, reverse=True)
-    if not files:
-        raise HTTPException(status_code=404, detail="No report found.")
-    return FileResponse(files[0], media_type="application/json", filename="report.json")
+@app.get("/stats/heatmap")
+async def get_heatmap(limit: int = 8, user_id: str = Depends(get_current_user)):
+    """Per-row occupancy history across recent analyses for the heatmap widget."""
+    cursor = db.analyses.find(
+        {}, {"report.rows": 1, "created_at": 1}
+    ).sort("created_at", -1).limit(limit)
+    docs = await cursor.to_list(limit)
+
+    row_map: dict[int, dict] = {}
+    for doc in reversed(docs):  # oldest first so history is chronological
+        for row in doc.get("report", {}).get("rows", []):
+            rid = row.get("row_id", 0)
+            if rid not in row_map:
+                row_map[rid] = {
+                    "row_id": rid,
+                    "row_display": row.get("row_display", rid + 1),
+                    "zone_label": row.get("zone_label", f"Row {rid + 1}"),
+                    "history": [],
+                }
+            row_map[rid]["history"].append(row.get("occupancy_percent", 0))
+
+    result = []
+    for rid in sorted(row_map.keys()):
+        entry = row_map[rid]
+        hist = entry["history"]
+        entry["avg_occupancy"] = round(sum(hist) / len(hist), 1) if hist else 0
+        result.append(entry)
+
+    return JSONResponse({"rows": result, "scan_count": len(docs)})
 
 
-@app.get("/download/csv")
-async def download_csv():
-    files = sorted(glob.glob(os.path.join(OUTPUTS_DIR, "report_*.csv")), key=os.path.getmtime, reverse=True)
-    if not files:
-        raise HTTPException(status_code=404, detail="No report found.")
-    return FileResponse(files[0], media_type="text/csv", filename="report.csv")
-
-
-@app.get("/download/video")
-async def download_video():
-    files = sorted(glob.glob(os.path.join(OUTPUTS_DIR, "processed_*.mp4")), key=os.path.getmtime, reverse=True)
-    if not files:
-        raise HTTPException(status_code=404, detail="No video found.")
-    return FileResponse(files[0], media_type="video/mp4", filename="processed_video.mp4")
+# ---------------------------------------------------------------------------
+# Routes — Downloads (by ID)
+# ---------------------------------------------------------------------------
 
 
 @app.get("/download/{analysis_id}/json")
-async def download_by_id_json(analysis_id: str):
+async def download_by_id_json(analysis_id: str, user_id: str = Depends(get_current_user)):
     try:
         oid = ObjectId(analysis_id)
     except Exception:
@@ -538,7 +734,7 @@ async def download_by_id_json(analysis_id: str):
 
 
 @app.get("/download/{analysis_id}/csv")
-async def download_by_id_csv(analysis_id: str):
+async def download_by_id_csv(analysis_id: str, user_id: str = Depends(get_current_user)):
     try:
         oid = ObjectId(analysis_id)
     except Exception:

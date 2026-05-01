@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { api } from "../services/api";
+import { analyzeImage, analyzeVideo } from "../services/api";
 
 export default function useAnalysis() {
   const [data, setData] = useState(null);
@@ -12,7 +12,8 @@ export default function useAnalysis() {
     setData(null);
 
     try {
-      const result = await api.analyze(file);
+      const isVideo = file?.type?.startsWith("video/");
+      const result = await (isVideo ? analyzeVideo(file) : analyzeImage(file));
       setData(result);
       return result;
     } catch (err) {

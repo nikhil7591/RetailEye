@@ -87,7 +87,7 @@ def draw_overlay(frame: np.ndarray, rows_analysis: dict) -> np.ndarray:
     overall_alert = rows_analysis.get("overall_alert", "OK")
     hud_lines = [f"RetailEye | Overall: {overall_occ}% | {overall_alert}"]
     for r in rows:
-        rid = r.get("row_id", 0) + 1
+        rid = r.get("row_display", r.get("row_id", 0) + 1)
         hud_lines.append(f"Row {rid}: {r.get('zone_label','')} - {r.get('occupancy_percent',0)}% [{r.get('alert','OK')}]")
 
     line_h = 22

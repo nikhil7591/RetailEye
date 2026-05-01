@@ -1,0 +1,503 @@
+RetailEye
+Complete Technical Audit Report
+Bugs · Missing Features · Static→Dynamic Conversion · Data Models · Optimizations
+Audited by Claude · May 2026
+
+1. Project Overview
+
+1.1 Project Purpose
+RetailEye is an AI-powered shelf intelligence platform designed for Indian retail stores. It accepts shelf images or videos, runs dual YOLOv8 object detection models (one for products, one for empty spaces), sends cropped product images to Groq Vision (Llama-4-Scout) for brand identification, and generates a structured analytics report with occupancy metrics, restock suggestions, and shelf health scores. All results are persisted in MongoDB for historical analysis.
+
+1.2 Tech Stack
+
+Layer          Technology              Details
+Frontend       React 18 + Vite         JSX, Tailwind CSS, React Router v6, Recharts, Lucide Icons
+Backend        FastAPI (Python)        Async routes, Motor (async MongoDB driver), Uvicorn
+AI / Vision    YOLOv8 + Groq           Ultralytics YOLOv8, Groq Llama-4-Scout-17b vision model
+Database       MongoDB                 Async via Motor, collection: analyses, no schema validation
+Image Processing OpenCV + Pillow       CLAHE enhancement, unsharp mask, base64 encoding
+File Output    JSON + CSV              report_generator.py writes outputs to /backend/outputs/
+Env Config     .env at root            MONGO_URI, MONGO_DB, GROQ_API_KEY
+
+1.3 Architecture
+Monolithic backend — single FastAPI process handling all routes, ML inference, file I/O, and database ops. No microservices, no task queue. Frontend is a pure SPA. Architecture flow: Browser -> FastAPI -> YOLO (local) -> Groq API -> MongoDB -> Browser.
+
+1.4 Folder Structure
+RetailEye-main/
+  .env.example              # env template
+  backend/
+    main.py                 # FastAPI app + all routes
+    detector.py             # YOLOv8 dual-model detection + row clustering
+    groq_vision.py          # Groq API wrapper with circuit breaker
+    analysis_engine.py      # Occupancy math + report generation
+    overlay.py              # OpenCV annotation drawing
+    video_processor.py      # Frame-by-frame video pipeline
+    pipeline.py             # Standalone CLI (duplicate of main pipeline)
+    report_generator.py     # JSON + CSV file writer
+    models/                 # products.pt, empty.pt (YOLO weights)
+    outputs/                # Generated files served as static
+  frontend/
+    src/
+      pages/                # Dashboard, History, Reports, Alerts, Settings, ...
+      components/          # dashboard/, layout/, ui/ subfolders
+      services/api.js      # All backend API calls
+      hooks/useAnalysis.js # Broken hook (see Bug #1)
+      App.jsx              # Routes
+
+2. Bug Detection — All Issues Found
+
+BUG #1 — CRITICAL: useAnalysis.js imports a non-existent api.analyze method
+File: frontend/src/hooks/useAnalysis.js — Line 2 & 14
+Type: Runtime Error — breaks any component using this hook
+Problem: import { api } from '../services/api' then calls api.analyze(file)
+Root Cause: api.js exports named functions (analyzeImage, analyzeVideo), NOT a default object called 'api'. There is no default export at all.
+Impact: Calling useAnalysis() throws: 'api is not defined' or 'api.analyze is not a function'. Fortunately Dashboard.jsx does NOT use this hook — it calls analyzeImage/analyzeVideo directly. But any future component using this hook will crash immediately.
+
+Fix:
+WRONG (current code):
+import { api } from '../services/api';
+const result = await api.analyze(file);
+
+CORRECT FIX:
+import { analyzeImage, analyzeVideo } from '../services/api';
+const isVideo = file.type?.startsWith('video/');
+const result = await (isVideo ? analyzeVideo(file) : analyzeImage(file));
+
+BUG #2 — CRITICAL: KPICards mini-charts show HARDCODED static data always
+File: frontend/src/components/dashboard/KPICards.jsx — Lines 4-7
+Type: Logic Bug — Misleading UI
+Problem: const data1 = [40,30,55,45,70,65,80], data2, data3, data4 are module-level constants. These never change regardless of real scan data.
+Root Cause: The sparklines inside each KPI card always render the same fake trend. Even if occupancy is 20%, the chart shows an upward trend.
+Impact: Users see encouraging upward sparklines even on failing shelves. This is functionally misleading for a real retail analytics tool.
+
+Fix — build chart data from history items passed as prop:
+export function KPICards({ metrics, historyItems = [] }) {
+  const scoreData  = historyItems.map(i => ({ value: i.shelf_score ?? 0 }));
+  const occData    = historyItems.map(i => ({ value: Math.round(i.report?.overall_occupancy ?? 0) }));
+  const emptyData  = historyItems.map(i => ({ value: i.report?.total_empty_slots ?? 0 }));
+  const prodData   = historyItems.map(i => ({ value: i.report?.total_products_detected ?? 0 }));
+  // Then pass scoreData/occData/emptyData/prodData to each card's chartData prop
+}
+// In Dashboard.jsx — pass history:
+<KPICards metrics={metrics} historyItems={history} />
+
+BUG #3 — CRITICAL: Heatmap is 100% hardcoded — not connected to any real data
+File: frontend/src/components/dashboard/Heatmap.jsx — Lines 4-18
+Type: Static Placeholder Disguised as Dynamic Feature
+Problem: const rows=[5,4,3,2,1]; const cols=[1..8]; getColor(r,c) returns green if c<=3, yellow if c<=6, red otherwise. This is completely hardcoded and always shows the same pattern.
+Root Cause: No props are passed to Heatmap. Dashboard.jsx renders <Heatmap /> with zero props.
+Impact: The heatmap never reflects real shelf data. A shelf with 100% occupancy shows the same red zones as one with 10% occupancy.
+
+Fix — compute heatmap from reportRows:
+// Dashboard.jsx — pass real data
+<Heatmap rows={reportRows} />
+
+// Heatmap.jsx
+export function Heatmap({ rows = [] }) {
+  // Map each row to a color based on occupancy_percent
+  const getColor = (occupancy) => {
+    if (occupancy >= 70) return 'bg-[#4ADE80]';  // green = OK
+    if (occupancy >= 40) return 'bg-[#FBBF24]';  // yellow = warning
+    return 'bg-[#F87171]';                        // red = critical
+  };
+  return rows.map(r => <div key={r.row_id} className={getColor(r.occupancy_percent)} />)
+}
+
+BUG #4 — HIGH: RestockSuggestions falls back to hardcoded dummy suggestions
+File: frontend/src/components/dashboard/RestockSuggestions.jsx — Lines 8-10
+Type: Silent Fallback Bug
+Problem: const suggestions = items.length ? items : [hardcoded array]. When real items exist, they lack an 'icon' property — the component checks item.icon which will always be undefined for API data.
+Root Cause: mapSuggestions() in Dashboard.jsx returns {text: '...'} objects without an icon field. Component defaults to <Milk /> for every item instead of contextual icons.
+Impact: Every restock suggestion shows a Milk icon regardless of product category (Snacks, Beverages, Personal Care etc). Also, when items=[] on first load, 3 fake dairy suggestions always appear.
+
+Fix:
+// mapSuggestions in Dashboard.jsx — add icon based on category
+function mapSuggestions(rows = []) {
+  const iconMap = { Dairy:'Milk', Beverages:'Droplets', Snacks:'Coffee', default:'Package' };
+  return rows.filter(r => r.alert !== 'OK')
+    .map(r => ({
+      text: `Restock ${r.zone_label} — ${r.occupancy_percent}% occupancy`,
+      category: r.zone_label?.replace(' Zone','') || 'Other'
+    }));
+}
+
+BUG #5 — HIGH: video_processor.py runs Groq only on frame 0, wrong report for all other frames
+File: backend/video_processor.py — Lines 65-80 & _process_frame_yolo_only()
+Type: Logic Bug — Incorrect Data Reuse
+Problem: _process_frame_yolo_only() tries to reuse product names from existing_report.rows[row_idx].products[det_idx]. It matches by INDEX (det_idx) not by bounding box position. As the video progresses and camera angle shifts, product positions in YOLO output change — wrong names get reused.
+Root Cause: det_idx < len(products) check is positional, not spatial. YOLO detections are not sorted consistently between frames.
+Impact: All frames after frame 0 show mismatched product labels. A Parle-G label can appear on a Maggi packet in later frames.
+
+Fix — sort detections by x-position before matching:
+# In _process_frame_yolo_only(), sort both sides by bbox x1
+sorted_row = sorted(row, key=lambda d: d['bbox'][0])
+for det_idx, det in enumerate(sorted_row):
+    # Now positional matching is at least left-to-right consistent
+
+BUG #6 — HIGH: pipeline.py has a separate identify_product() with different signature than groq_vision.py
+File: backend/pipeline.py — Lines 50-80
+Type: Code Duplication + Silent Inconsistency
+Problem: pipeline.py defines its own identify_product(base64_img: str) that takes a raw base64 string and returns a plain string name. groq_vision.py's identify_product(crop_image_np) takes a numpy array and returns a dict with product_name, category, confidence. They are completely different functions with the same name.
+Root Cause: pipeline.py was written independently as a CLI tool and never refactored to use the shared groq_vision module.
+Impact: If pipeline.py is ever imported or called from another module, it will shadow or conflict with groq_vision.identify_product. Maintenance nightmare — two code paths for the same feature.
+
+Fix:
+# In pipeline.py — DELETE the local identify_product() entirely
+# Add this import instead:
+from groq_vision import identify_product as _identify_product
+
+# Then adapt usage — convert numpy crop to call _identify_product(crop_np)
+# instead of _identify_product(base64_str)
+
+BUG #7 — HIGH: analysis_engine.py row_id is off-by-one — inconsistent between raw data and report
+File: backend/analysis_engine.py — Line 64
+Type: Data Inconsistency Bug
+Problem: report_rows.append({'row_id': row_id + 1, ...}). Input row_id starts at 0, but analyze() outputs row_id starting at 1. However, raw_rows passed to draw_overlay() still have row_id starting at 0.
+Root Cause: The +1 was added for display purposes but breaks the alignment between report.rows and _raw_rows when overlay.py iterates both arrays by index.
+Impact: overlay.py uses enumerate(rows) and idx to access raw_rows[idx]. The row_id field in report rows is purely display and does not affect this. However, if any code ever tries to use row_id to cross-reference between raw_rows and report rows, it will be off by one.
+
+Fix — use consistent 0-based IDs internally, only add +1 for display:
+# In analyze(), store raw row_id as-is:
+report_rows.append({ 'row_id': row_id, 'row_display': row_id + 1, ... })
+# In frontend, display row_display instead of row_id
+
+BUG #8 — HIGH: Settings page saves nothing — Save Changes is purely cosmetic
+File: frontend/src/pages/Settings.jsx — handleSave() at Line 15
+Type: Broken UX / Missing Implementation
+Problem: handleSave() only sets setSaved(true) for 2 seconds then resets. It does not call any API, does not save to localStorage, does not update any global state. Store Name, Store ID, and Alert Threshold changes vanish on page refresh.
+Root Cause: No API endpoint exists for saving settings. No global state management either.
+Impact: The alert thresholds (critThreshold, warnThreshold) set in Settings have ZERO effect on backend analysis. Backend hardcodes _ALERT_OK=70 and _ALERT_WARNING=40 in analysis_engine.py. User-facing sliders are completely decorative.
+
+Fix:
+# Step 1 — add POST /settings endpoint in backend/main.py
+@app.post('/settings')
+async def save_settings(body: dict):
+    await db.settings.replace_one({}, body, upsert=True)
+    return {'status': 'saved'}
+
+# Step 2 — add to api.js
+export async function saveSettings(data) {
+  return apiFetch('/settings', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) });
+}
+
+# Step 3 — use thresholds in analysis_engine.py
+# Load thresholds from DB at startup or per-request
+
+BUG #9 — MEDIUM: Alerts page resolves alerts only in memory — refreshing loses all resolutions
+File: frontend/src/pages/Alerts.jsx — markResolved() at Line 45
+Type: State Persistence Bug
+Problem: const [resolved, setResolved] = useState(new Set()). When user marks an alert resolved, it only disappears from the UI temporarily. On page refresh or navigation, resolved state resets.
+Root Cause: No backend endpoint to persist alert resolution. No localStorage fallback either.
+Impact: Every page visit shows the same critical alerts again. Users cannot track what has been actioned.
+
+Fix — options:
+Option A (quick): persist to localStorage
+const [resolved, setResolved] = useState(() => {
+  const saved = localStorage.getItem('retaileye:resolved');
+  return saved ? new Set(JSON.parse(saved)) : new Set();
+});
+// Update localStorage whenever resolved changes
+useEffect(() => { localStorage.setItem('retaileye:resolved', JSON.stringify([...resolved])); }, [resolved]);
+
+Option B (proper): add PATCH /history/:id/resolve endpoint in backend
+
+BUG #10 — MEDIUM: OutputPreview always passes detections={[]} — overlay bounding boxes never shown in preview
+File: frontend/src/pages/Dashboard.jsx — Line 198
+Type: Missing Data Connection
+Problem: <OutputPreview imageSrc={imageSrc} detections={[]} isAnalyzed={!!imageSrc} />. The detections prop is always an empty array.
+Root Cause: The actual detection data is in latestResult.report.products (flat list) and latestResult.report.rows (per-row). These are never extracted and passed to OutputPreview.
+Impact: OutputPreview component gets bounding box data but is never given any. If OutputPreview renders boxes from detections prop, they never appear.
+
+Fix:
+// Dashboard.jsx
+const detections = latestResult?.report?.products ?? [];
+<OutputPreview
+  imageSrc={imageSrc}
+  detections={detections}
+  isAnalyzed={!!imageSrc}
+/>
+
+BUG #11 — MEDIUM: Security — CORS is allow_origins=['*'] with allow_credentials=True — this is invalid
+File: backend/main.py — Lines 22-27
+Type: Security Vulnerability / CORS Misconfiguration
+Problem: CORSMiddleware with allow_origins=['*'] AND allow_credentials=True. Browsers reject this combination. The CORS spec forbids wildcard origins when credentials mode is enabled.
+Root Cause: Credentials flag was added without understanding the incompatibility with wildcard origins.
+Impact: In some browser/server combos this will cause CORS preflight failures for credentialed requests. Also a security risk in production — any origin can hit this API.
+
+Fix:
+# For development:
+allow_origins=['http://localhost:5173', 'http://127.0.0.1:5173'],
+allow_credentials=True,
+
+# OR for open API without credentials:
+allow_origins=['*'],
+allow_credentials=False,   # remove this line or set False
+
+BUG #12 — MEDIUM: grid_fallback in pipeline.py uses box.xyxy[0] for crop_to_base64 but passes wrong image
+File: backend/pipeline.py — Lines 95-105
+Type: Logic Bug — Wrong variable in crop
+Problem: crop_to_base64(image, box) is called with full image and a YOLO box from a cell sub-image. But the box coordinates are relative to the cell (x1,y1 are cell-local), while image is the full image. The crop will extract the wrong region.
+Root Cause: The grid crops a cell, runs YOLO on the cell, gets cell-local bbox. crop_to_base64 should either receive the cell sub-image or get offset-adjusted coordinates.
+Impact: Grid fallback product identification sends wrong image crops to Groq, leading to incorrect product names.
+
+Fix:
+# In grid_fallback(), pass the cell sub-image, not the full image
+# Change:
+b64 = crop_to_base64(image, box)
+# To:
+b64 = crop_to_base64(cell, box)  # cell is the cropped sub-image
+
+BUG #13 — LOW: History.jsx download links hardcode localhost:8000 instead of using getDownloadUrl()
+File: frontend/src/pages/History.jsx — Lines 98 & 152
+Type: Hardcoded URL / Portability Issue
+Problem: href={`http://localhost:8000/download/${row._id}/csv`} — URL is hardcoded. If backend runs on a different port or domain (staging, production), downloads break.
+Root Cause: Developer directly used localhost URL instead of the getDownloadUrl() helper already exported from api.js.
+Fix:
+# Import the helper (already exists in api.js)
+import { getDownloadUrl } from '../services/api';
+# Then use it
+href={getDownloadUrl(row._id, 'csv')}
+
+3. Missing Features & Incomplete Implementations
+
+3.1 Authentication — Completely Absent
+There is no login, no session, no JWT, no API key guard. Any person who discovers the backend URL can upload images, read all history, download all reports, and delete everything. For a retail analytics tool handling business-sensitive shelf data, this is a blocker for any real deployment.
+Required: POST /auth/login, POST /auth/register, JWT middleware on all routes except /health and /auth/*
+Frontend: login page, auth context, token stored in httpOnly cookie or memory
+
+3.2 store_id is Hardcoded to 'store_001'
+analysis_engine.py line 88: store_id: 'store_001'. This is never read from config, request, or database. A multi-store deployment (e.g. a retail chain with 10 outlets) cannot be supported. Every analysis is attributed to the same store.
+Fix: accept store_id as a request parameter in /analyze/image and /analyze/video
+Store it in the MongoDB document and expose it in /history filters
+
+3.3 Settings Thresholds Have No Backend Effect
+The Settings page has sliders for Warning (default 70%) and Critical (default 40%) thresholds. These values are never sent to the backend. analysis_engine.py has _ALERT_OK = 70 and _ALERT_WARNING = 40 hardcoded as module-level constants. The Settings UI is purely decorative.
+Fix: create a /settings GET+POST endpoint, load thresholds from DB, pass them into analyze()
+
+3.4 BeforeAfter Page Has No Diff Visualization
+The Before/After comparison shows numeric diffs (score change, occupancy change, empty slot change) but has no visual side-by-side diff of which specific shelf zones improved or worsened. The row breakdown bars are shown separately per card but there is no overlaid comparison.
+Recommended: add a third 'Comparison' table below showing row-by-row before vs after occupancy with color-coded delta
+
+3.5 Video Analysis Has No Progress Feedback
+When a video is uploaded, the progress bar maxes out at 40% (upload complete) and then stays stuck until analysis finishes. process_video() runs synchronously in the FastAPI event loop, blocking all other requests. Long videos can take minutes with zero feedback.
+Short fix: run process_video() in a thread pool — asyncio.to_thread(process_video, ...)
+Proper fix: use Celery/Redis task queue, return a task_id immediately, poll /tasks/:id for status
+
+3.6 No Error Boundary in React Frontend
+There is no React ErrorBoundary component. Any unhandled JS error in a dashboard component (e.g., a null access in mapRows()) will crash the entire SPA with a blank white screen and no recovery option.
+Add a top-level <ErrorBoundary> wrapper in App.jsx that shows a friendly error page with a Retry button
+
+3.7 report_generator.py is Not Read — Its Output is Unused
+save_json() and save_csv() write files to /outputs/. But the /download/ endpoints just scan the outputs directory for the newest file using glob. If two requests come in simultaneously, each will write files and the glob will return the wrong one for one of the requests. This is a race condition.
+Fix: generate a unique UID per request (already done), and always serve by specific filename not glob
+
+3.8 SingleAnalysis.jsx, LandingPage.jsx Pages Exist but Unclear Purpose
+There are page files for SingleAnalysis and LandingPage. LandingPage is the '/' route. SingleAnalysis is not used in App.jsx routes at all — it exists in the filesystem but is never rendered.
+SingleAnalysis.jsx appears to be an orphaned page — either wire it to a /single-analysis route or delete it
+
+4. Dashboard Feature Explanation (All Widgets)
+
+Widget                 Current State                              Business Use Case                                What Should Power It
+KPI Cards (4)          Metrics real; sparkline charts STATIC       At-a-glance store performance for store manager  Sparklines from last 7-10 history items
+Shelf Health Score     Dynamic (reads from latestResult)          Single score to judge restocking urgency         shelf_score field from /analyze response
+Row Breakdown          Dynamic (reads reportRows)                Identify which shelf row needs attention        report.rows array from analysis response
+Output Preview         Dynamic image; bounding boxes MISSING      See what AI detected on the shelf image          processed_image_url + detections from report
+Heatmap                100% HARDCODED static                     Visualize hotspots — which shelf sections empty fastest  Per-row occupancy_percent over time from /history
+Restock Suggestions    Partially dynamic; falls back to dummy     Prioritized action list for floor staff          Sorted report.rows filtered by alert != OK
+Restock Priority       Dynamic — top 3 rows by priority            Quick view of most urgent zones                  report.restock_priority array
+Recent Analyses Table   Dynamic — reads last 6 from /history        Track all past scans, click to drill down        GET /history with pagination
+
+5. Static → Dynamic Conversion Plan
+
+5.1 KPI Card Sparklines
+Current: 4 static arrays (data1..data4) hardcoded in KPICards.jsx. Always shows same upward trend.
+Dynamic Flow:
+Frontend: Dashboard.jsx passes history (last 10 items) to <KPICards historyItems={history} />
+KPICards.jsx: derives scoreData, occData, emptyData, prodData from historyItems
+No new API needed — /history already returns all required fields
+
+5.2 Heatmap
+Current: Static grid with hardcoded color logic. Always shows green on left, red on right.
+Target Dynamic Behavior:
+Show each shelf ROW as a colored band. Color based on average occupancy of that row across last N scans. Columns could represent time (last 8 scans).
+API Required:
+GET /stats/heatmap?limit=8
+Response: { rows: [ { row_id: 0, avg_occupancy: 45.2, history: [62, 55, 48, 40, 38, 35, 41, 45] }, ... ] }
+
+Backend Logic (add to main.py):
+@app.get('/stats/heatmap')
+async def get_heatmap(limit: int = 8):
+    recent = db.analyses.find({}).sort('created_at',-1).limit(limit)
+    # For each scan, extract per-row occupancy
+    # Group by row index, compute avg
+    # Return matrix data for frontend
+
+Frontend (Heatmap.jsx):
+export function Heatmap({ rows = [] }) {
+  // rows: [{row_id, history:[occ1,occ2,...]}]
+  // Render grid: rows.length rows x history.length cols
+  // Color cell by occupancy value
+}
+
+5.3 Settings Thresholds
+Current: Sliders only affect local React state. No persistence, no effect on backend.
+Full Implementation Plan:
+Add MongoDB collection: settings (single document, upsert pattern)
+Add GET /settings + POST /settings in main.py
+In analysis_engine.analyze(), accept thresholds as optional parameters
+In main.py /analyze routes, load settings from DB before calling analyze()
+In Settings.jsx, load current thresholds on mount, POST on save
+
+API:
+GET  /settings -> { warn_threshold: 70, crit_threshold: 40, store_name: '...' }
+POST /settings <- { warn_threshold: 65, crit_threshold: 35, store_name: '...' }
+
+6. Data Model Design
+
+6.1 Current MongoDB Schema (analyses collection)
+{
+  _id: ObjectId,
+  filename: String,
+  file_type: 'image' | 'video',
+  processed_image_url: String,   // /outputs/processed_abc.jpg
+  report_json_url: String,
+  report_csv_url: String,
+  shelf_score: Number,           // 0-100
+  report: {
+    store_id: String,            // always 'store_001' — BUG
+    timestamp: ISODate,
+    overall_occupancy: Number,
+    overall_alert: 'OK'|'Warning'|'Critical',
+    total_products_detected: Number,
+    total_empty_slots: Number,
+    total_slots: Number,
+    products: [{name,confidence,bbox}],
+    empty_spaces: [{confidence,bbox}],
+    rows: [{row_id,zone_label,occupancy_percent,alert,products,empty_slots}],
+    restock_priority: [String],
+    summary: {total_products,total_empty,shelf_fill_percentage}
+  },
+  created_at: ISODate
+}
+
+6.2 Recommended Extended Schema (Production Ready)
+
+Users Collection
+{
+  _id: ObjectId,
+  email: String (unique, indexed),
+  password_hash: String,
+  role: 'admin' | 'manager' | 'viewer',
+  store_ids: [String],            // which stores they can access
+  created_at: ISODate
+}
+
+Stores Collection
+{
+  _id: ObjectId,
+  store_id: String (unique, e.g. 'store_001'),
+  name: String,
+  location: String,
+  camera_ids: [String],
+  warn_threshold: Number,          // per-store alert thresholds
+  crit_threshold: Number,
+  created_at: ISODate
+}
+
+Settings Collection (global/per-store)
+{
+  _id: ObjectId,
+  store_id: String,
+  warn_threshold: Number,  // default 70
+  crit_threshold: Number,  // default 40
+  store_name: String,
+  updated_at: ISODate
+}
+
+Analyses Collection (extended from current)
+{
+  _id: ObjectId,
+  store_id: String (indexed),      // add this
+  user_id: ObjectId (ref: users),  // add this
+  filename: String,
+  file_type: String,
+  shelf_score: Number,
+  report: { ... },                 // same as current
+  alert_resolved: Boolean,          // add this for Alerts page
+  resolved_at: ISODate,             // add this
+  resolved_by: ObjectId,            // add this
+  created_at: ISODate
+}
+
+Schema Relationships
+Users (1) → many Stores (via store_ids array)
+Stores (1) → many Analyses (via store_id field)
+Users (1) → many Analyses (as uploader, via user_id)
+Stores (1) → 1 Settings document
+
+7. Performance & Scalability Improvements
+
+7.1 Critical: Video Analysis Blocks the Event Loop
+process_video() is a CPU/IO-heavy synchronous function called directly in an async FastAPI handler. This blocks all other requests for the duration of video processing.
+Immediate fix: wrap in asyncio.to_thread()
+report = await asyncio.to_thread(process_video, tmp.name, out_path)
+Proper fix: Celery + Redis task queue. Return {task_id} immediately, add GET /tasks/:id endpoint
+
+7.2 No File Cleanup — outputs/ Directory Grows Forever
+Every image/video analysis writes 3 files (image, JSON, CSV) to /backend/outputs/. There is no deletion, no expiry, no limit. A server running for weeks will accumulate hundreds of files.
+Add a cleanup job: after MongoDB delete operations, also delete corresponding files from disk
+Add TTL: on startup, scan outputs/ and delete files older than 30 days whose MongoDB record no longer exists
+
+7.3 Groq API Rate Limiting — No Request Queue
+groq_vision.py has a circuit breaker (skips calls for N seconds after a 429). But during that window, all product names fall back to 'Unidentified Product'. For batch analysis with 8 images, if the 3rd image triggers a 429, images 4-8 all get poor identification.
+Add exponential backoff with jitter instead of a flat skip
+Add a request queue (asyncio.Queue) to serialize Groq calls and respect rate limits gracefully
+
+7.4 No Caching for /stats and /history
+Dashboard.jsx calls getStats() and getHistory() on every mount. /stats runs a MongoDB aggregation pipeline on every request. This is expensive at scale.
+Cache /stats response for 60 seconds using fastapi-cache2 or a simple in-memory dict with timestamp
+Cache /history page 0 for 30 seconds — it's the most frequently requested
+
+7.5 Frontend Re-renders on Every Route Change
+Dashboard.jsx calls loadData() (getStats + getHistory) every time the component mounts. Navigating Dashboard -> History -> Dashboard triggers 2 fresh API calls. No React Query, no SWR, no caching layer.
+Add React Query (TanStack Query) — 3 lines to cache API responses with stale-while-revalidate
+Or implement a simple context-level cache with a Map and a timestamp
+
+7.6 MongoDB Has No Indexes
+/history sorts by created_at. /notifications queries on report.overall_alert. Without indexes, these are full collection scans.
+# Add to startup_db() in main.py
+await db.analyses.create_index([('created_at', -1)])
+await db.analyses.create_index([('report.overall_alert', 1)])
+await db.analyses.create_index([('store_id', 1), ('created_at', -1)])
+
+8. Code Quality Improvements
+
+8.1 Dead / Unused Code
+frontend/src/components/DownloadPanel.jsx, HealthCard.jsx, RestockList.jsx, RowBreakdownTable.jsx, VideoPlayer.jsx, UploadPanel.jsx — exist in components/ but appear to be legacy, replaced by dashboard/ counterparts. Audit and delete or integrate them.
+frontend/src/pages/SingleAnalysis.jsx — not imported in App.jsx. Dead code.
+backend/pipeline.py — the CLI tool duplicates all logic from main.py + groq_vision.py. Keep it but refactor to import from shared modules.
+
+8.2 Naming Conventions
+Frontend: component files use PascalCase (correct). Service files use camelCase (correct). No issues here.
+Backend: _build_empty_shelf_rows() is duplicated identically in both main.py and video_processor.py. Extract to a shared helpers.py module.
+Backend: _run_image_pipeline() in main.py and _process_single_frame() in video_processor.py are near-identical. Consolidate.
+
+8.3 Reusable Component Opportunities
+StatusBadge appears as a standalone component in History.jsx and also inline in Reports.jsx and BatchAnalysis.jsx. Extract to ui/StatusBadge.jsx and reuse.
+The detail drawer/modal (used in History.jsx) and the alert detail modal (Alerts.jsx) share very similar structure. Extract to ui/DetailDrawer.jsx.
+All download link + button patterns (<a href download><button>) repeat across History, Reports, BatchAnalysis. Extract to a DownloadButton.jsx component.
+
+8.4 Environment Config Issues
+.env.example shows placeholders but the app has NO .env validation. If GROQ_API_KEY is missing, groq_vision.py silently returns fallback for every crop. No startup warning.
+Add a startup validation function that checks required env vars and logs clear warnings or raises on missing GROQ_API_KEY.
+BASE_URL in api.js is hardcoded to http://localhost:8000. For production builds, this must come from import.meta.env.VITE_API_URL.
+// api.js — fix:
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+8.5 Error Handling Gaps
+useAnalysis.js (the broken hook) does setError(err.message) but there is no toast notification system. Errors silently update local state that nothing displays.
+BatchAnalysis.jsx processes files sequentially (for...of loop). If one fails, it continues. But the error message is per-file. Consider adding a global batch error summary.
+All catch blocks in frontend use err.message — if the error is non-Error (e.g. a raw string rejection), .message will be undefined. Add: err?.message || String(err)
+
+RetailEye Technical Audit — End of Report
+13 Bugs Found · 8 Missing Features · 6 Performance Issues · 5 Code Quality Items

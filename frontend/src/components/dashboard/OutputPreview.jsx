@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Maximize2, ZoomIn, ZoomOut, ImageOff, CheckCircle2 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "../ui/Card";
 import { Button } from "../ui/Button";
@@ -22,48 +22,120 @@ export function OutputPreview({ imageSrc, detections = [], isAnalyzed = false })
   const [zoom, setZoom] = useState(1);
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  const [imageSize, setImageSize] = useState({ width: 1, height: 1 });
+  const [containerSize, setContainerSize] = useState({ width: 1, height: 1 });
   const scrollRef = useRef(null);
+  const imgRef = useRef(null);
+  const frameRef = useRef(null);
+
+  useEffect(() => {
+    const node = frameRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return undefined;
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      setContainerSize({ width: Math.max(1, width), height: Math.max(1, height) });
+    });
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   const handleZoomIn  = () => setZoom((z) => Math.min(z + 0.25, 4));
   const handleZoomOut = () => setZoom((z) => Math.max(z - 0.25, 0.5));
   const handleReset   = () => setZoom(1);
 
-  // Build overlay boxes — works with both mock % coords and real pixel coords
+  const displayRect = useMemo(() => {
+    const { width: frameWidth, height: frameHeight } = containerSize;
+    const { width: naturalWidth, height: naturalHeight } = imageSize;
+    if (!frameWidth || !frameHeight || !naturalWidth || !naturalHeight) {
+      return { left: 0, top: 0, width: frameWidth, height: frameHeight };
+    }
+
+    const frameRatio = frameWidth / frameHeight;
+    const imageRatio = naturalWidth / naturalHeight;
+
+    if (imageRatio > frameRatio) {
+      const width = frameWidth;
+      const height = frameWidth / imageRatio;
+      return { left: 0, top: (frameHeight - height) / 2, width, height };
+    }
+
+    const height = frameHeight;
+    const width = frameHeight * imageRatio;
+    return { left: (frameWidth - width) / 2, top: 0, width, height };
+  }, [containerSize, imageSize]);
+
+  const toPercentBox = (bbox) => {
+    if (!bbox || bbox.length !== 4 || !imageSize.width || !imageSize.height) return null;
+    const [x1, y1, x2, y2] = bbox;
+    return {
+      x: (x1 / imageSize.width) * 100,
+      y: (y1 / imageSize.height) * 100,
+      w: ((x2 - x1) / imageSize.width) * 100,
+      h: ((y2 - y1) / imageSize.height) * 100,
+    };
+  };
+
+  const formatLabel = (label) => {
+    const text = label || "Item";
+    return text.length > 18 ? `${text.slice(0, 17)}…` : text;
+  };
+
+  // Build overlay boxes — supports percent coords or raw pixel bboxes
   const renderBoxes = () =>
     detections.map((det, idx) => {
       const colors = getColors(det.type || det.category || "Other");
+      const box = det.bbox ? toPercentBox(det.bbox) : det;
+      if (!box) return null;
+      const left = displayRect.left + (box.x / 100) * displayRect.width;
+      const top = displayRect.top + (box.y / 100) * displayRect.height;
+      const width = (box.w / 100) * displayRect.width;
+      const height = (box.h / 100) * displayRect.height;
+      const labelTooSmall = width < 44 || height < 20;
       return (
         <div
           key={idx}
           className="absolute group"
           style={{
-            left:   `${det.x}%`,
-            top:    `${det.y}%`,
-            width:  `${det.w}%`,
-            height: `${det.h}%`,
+            left,
+            top,
+            width,
+            height,
             border: `1.5px solid ${colors.border}`,
             boxSizing: "border-box",
           }}
         >
-          <span
-            className="absolute left-0 -top-[15px] px-[3px] py-[1px] text-[8px] font-bold text-white whitespace-nowrap leading-tight"
-            style={{ backgroundColor: colors.label }}
-          >
-            {det.label || det.product_name || "Item"}
-          </span>
+          {!labelTooSmall && (
+            <span
+              className="absolute left-0 -top-[16px] max-w-full rounded px-[4px] py-[1px] text-[8px] font-bold text-white whitespace-nowrap overflow-hidden text-ellipsis leading-tight shadow-sm"
+              style={{ backgroundColor: colors.label }}
+            >
+              {formatLabel(det.label || det.product_name || "Item")}
+            </span>
+          )}
         </div>
       );
     });
 
   const ImageWithOverlay = () => (
-    <div className="relative w-full h-full">
+    <div ref={frameRef} className="relative w-full h-full">
       <img
         src={imageSrc}
         alt="Shelf analysis output"
-        className="w-full h-full object-contain bg-[#0F172A]"
+        className="absolute inset-0 h-full w-full object-contain bg-[#0F172A]"
         draggable={false}
+        ref={imgRef}
+        onLoad={(e) => {
+          const { naturalWidth, naturalHeight } = e.currentTarget;
+          if (naturalWidth && naturalHeight) {
+            setImageSize({ width: naturalWidth, height: naturalHeight });
+          }
+        }}
       />
-      {renderBoxes()}
+      <div className="absolute inset-0">{renderBoxes()}</div>
     </div>
   );
 

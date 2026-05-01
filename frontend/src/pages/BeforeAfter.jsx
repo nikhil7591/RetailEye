@@ -111,6 +111,19 @@ export function BeforeAfter() {
     ? ((after.report?.total_empty_slots ?? 0) - (before.report?.total_empty_slots ?? 0))
     : null;
 
+  const comparisonRows = before && after
+    ? (after.report?.rows ?? []).map((row, idx) => {
+        const beforeRow = before.report?.rows?.[idx];
+        const delta = (row.occupancy_percent ?? 0) - (beforeRow?.occupancy_percent ?? 0);
+        return {
+          row: row.row_display ?? row.row_id ?? idx + 1,
+          beforeOcc: beforeRow?.occupancy_percent ?? 0,
+          afterOcc: row.occupancy_percent ?? 0,
+          delta,
+        };
+      })
+    : [];
+
   return (
     <div className="flex flex-col gap-6 pb-8">
       <div>
@@ -155,6 +168,40 @@ export function BeforeAfter() {
                 </p>
               </div>
             ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {before && after && comparisonRows.length > 0 && (
+        <Card className="border-[#E2E8F0]">
+          <CardHeader className="py-4 border-b border-[#E2E8F0]">
+            <CardTitle className="text-[12px] font-bold tracking-wider text-[#0F172A] uppercase flex items-center gap-2">
+              <ArrowLeftRight className="h-4 w-4 text-[#4F46E5]" />
+              Row-by-Row Comparison
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
+                  {['Row', 'Before', 'After', 'Delta'].map((h) => (
+                    <th key={h} className="px-4 py-3 text-left text-[11px] font-bold text-[#64748B] uppercase tracking-wide">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {comparisonRows.map((row) => (
+                  <tr key={row.row} className="border-b border-[#F1F5F9] last:border-0">
+                    <td className="px-4 py-3 text-sm font-semibold text-[#334155]">Row {row.row}</td>
+                    <td className="px-4 py-3 text-sm text-[#64748B]">{row.beforeOcc}%</td>
+                    <td className="px-4 py-3 text-sm text-[#64748B]">{row.afterOcc}%</td>
+                    <td className={cn("px-4 py-3 text-sm font-bold", row.delta > 0 ? "text-[#22C55E]" : row.delta < 0 ? "text-[#EF4444]" : "text-[#64748B]")}>
+                      {row.delta > 0 ? "+" : ""}{row.delta.toFixed(1)}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </CardContent>
         </Card>
       )}

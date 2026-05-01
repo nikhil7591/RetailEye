@@ -2,13 +2,14 @@ import { Card, CardContent } from "../ui/Card";
 import { AreaChart, Area, ResponsiveContainer } from "recharts";
 import { Star, AlertCircle, Box, Hexagon } from "lucide-react";
 
-const data1 = [{ value: 40 }, { value: 30 }, { value: 55 }, { value: 45 }, { value: 70 }, { value: 65 }, { value: 80 }];
-const data2 = [{ value: 60 }, { value: 55 }, { value: 65 }, { value: 60 }, { value: 75 }, { value: 60 }, { value: 85 }];
-const data3 = [{ value: 10 }, { value: 15 }, { value: 12 }, { value: 18 }, { value: 14 }, { value: 20 }, { value: 16 }];
-const data4 = [{ value: 20 }, { value: 22 }, { value: 21 }, { value: 25 }, { value: 23 }, { value: 28 }, { value: 26 }];
-
-export function KPICards({ metrics }) {
+export function KPICards({ metrics, historyItems = [] }) {
   if (!metrics) return null;
+
+  const history = historyItems.slice().reverse();
+  const scoreData = history.map((i) => ({ value: i.shelf_score ?? 0 }));
+  const occData = history.map((i) => ({ value: Math.round(i.report?.overall_occupancy ?? 0) }));
+  const emptyData = history.map((i) => ({ value: i.report?.total_empty_slots ?? 0 }));
+  const prodData = history.map((i) => ({ value: i.report?.total_products_detected ?? 0 }));
 
   const cards = [
     {
@@ -19,7 +20,7 @@ export function KPICards({ metrics }) {
       iconColor: "text-[#6366F1]",
       iconBg: "bg-[#EEF2FF]",
       chartColor: "#6366F1",
-      chartData: data1,
+      chartData: scoreData,
       valueColor: "text-[#6366F1]"
     },
     {
@@ -30,7 +31,7 @@ export function KPICards({ metrics }) {
       iconColor: "text-[#F59E0B]",
       iconBg: "bg-[#FEF3C7]",
       chartColor: "#F59E0B",
-      chartData: data2,
+      chartData: occData,
       valueColor: "text-[#F59E0B]"
     },
     {
@@ -41,7 +42,7 @@ export function KPICards({ metrics }) {
       iconColor: "text-[#EF4444]",
       iconBg: "bg-[#FEE2E2]",
       chartColor: "#EF4444",
-      chartData: data3,
+      chartData: emptyData,
       valueColor: "text-[#EF4444]"
     },
     {
@@ -52,7 +53,7 @@ export function KPICards({ metrics }) {
       iconColor: "text-[#22C55E]",
       iconBg: "bg-[#DCFCE7]",
       chartColor: "#22C55E",
-      chartData: data4,
+      chartData: prodData,
       valueColor: "text-[#22C55E]"
     },
   ];

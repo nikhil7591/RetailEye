@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Bell, CheckCircle2, AlertTriangle, XCircle, Eye } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "../components/ui/Card";
-import { getHistory, getFileUrl } from "../services/api";
+import { getHistory, getFileUrl, resolveHistoryItem } from "../services/api";
 import { Loader } from "../components/ui/Loader";
 import { cn } from "../lib/utils";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -11,7 +11,7 @@ export function Alerts() {
   const navigate = useNavigate();
   const [alerts, setAlerts]     = useState([]);
   const [loading, setLoading]   = useState(true);
-  const [resolved, setResolved] = useState(new Set());
+  const [resolved, setResolved] = useState(() => new Set());
   const [selected, setSelected] = useState(null);
 
   useEffect(() => {
@@ -31,8 +31,11 @@ export function Alerts() {
             rows: item.report?.rows ?? [],
             time: item.created_at ? new Date(item.created_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "—",
             processed_image_url: item.processed_image_url,
+            alert_resolved: item.alert_resolved === true,
           }));
         setAlerts(alertItems);
+        const resolvedIds = new Set(alertItems.filter((a) => a.alert_resolved).map((a) => a._id));
+        setResolved(resolvedIds);
       } finally {
         setLoading(false);
       }
@@ -50,7 +53,14 @@ export function Alerts() {
     }
   }, [alerts, location.state, selected]);
 
-  const markResolved = (id) => setResolved(prev => new Set([...prev, id]));
+  const markResolved = async (id) => {
+    try {
+      await resolveHistoryItem(id);
+      setResolved((prev) => new Set([...prev, id]));
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const criticals = alerts.filter(a => a.alert === "Critical" && !resolved.has(a._id));
   const warnings  = alerts.filter(a => a.alert === "Warning" && !resolved.has(a._id));
@@ -186,7 +196,7 @@ export function Alerts() {
             {selected.rows.map((row, i) => (
               <div key={i} className="mb-3">
                 <div className="flex justify-between mb-1">
-                  <span className="text-xs font-semibold text-[#334155]">Row {row.row_id} — {row.zone_label}</span>
+                  <span className="text-xs font-semibold text-[#334155]">Row {row.row_display ?? row.row_id} — {row.zone_label}</span>
                   <span className="text-xs font-bold text-[#4F46E5]">{row.occupancy_percent}%</span>
                 </div>
                 <div className="h-2 bg-[#F1F5F9] rounded-full">

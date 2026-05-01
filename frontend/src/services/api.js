@@ -3,20 +3,45 @@
  * All calls go to the FastAPI backend at http://localhost:8000
  */
 
-const BASE_URL = "http://localhost:8000";
+export const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
-// Helper: generic fetch with error handling
-async function apiFetch(path, options = {}) {
-  const res = await fetch(`${BASE_URL}${path}`, options);
-  if (!res.ok) {
-    let detail = `HTTP ${res.status}`;
-    try {
-      const err = await res.json();
-      detail = err.detail || detail;
-    } catch (_) {}
-    throw new Error(detail);
+let authToken = null;
+export function setAuthToken(token) {
+  authToken = token;
+}
+
+export async function apiFetch(endpoint, options = {}) {
+  const headers = {
+    ...options.headers,
+  };
+  
+  if (authToken) {
+    headers["Authorization"] = `Bearer ${authToken}`;
   }
-  return res.json();
+
+  const response = await fetch(`${BASE_URL}${endpoint}`, {
+    ...options,
+    headers,
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      // Clear token and redirect if unauthorized
+      setAuthToken(null);
+      localStorage.removeItem("retaileye:token");
+      localStorage.removeItem("retaileye:user");
+      window.location.href = "/login";
+    }
+    let msg = "API Error";
+    try {
+      const errData = await response.json();
+      msg = errData.detail || msg;
+    } catch (e) {
+      msg = `HTTP Error ${response.status}`;
+    }
+    throw new Error(msg);
+  }
+  return response.json();
 }
 
 // ─── Analysis ──────────────────────────────────────────────────────────────
@@ -34,6 +59,9 @@ export async function analyzeImage(file, onProgress) {
 
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `${BASE_URL}/analyze/image`);
+    if (authToken) {
+      xhr.setRequestHeader("Authorization", `Bearer ${authToken}`);
+    }
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) {
@@ -75,6 +103,9 @@ export async function analyzeVideo(file, onProgress) {
 
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `${BASE_URL}/analyze/video`);
+    if (authToken) {
+      xhr.setRequestHeader("Authorization", `Bearer ${authToken}`);
+    }
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) {
@@ -106,8 +137,18 @@ export async function analyzeVideo(file, onProgress) {
 
 // ─── History ───────────────────────────────────────────────────────────────
 
-export async function getHistory(limit = 50, skip = 0) {
-  return apiFetch(`/history?limit=${limit}&skip=${skip}`);
+export async function getHistory(limit = 50, skip = 0, storeId = null) {
+  const params = new URLSearchParams({ limit, skip });
+  if (storeId) params.append("store_id", storeId);
+  const qs = params.toString();
+  
+  const cacheKey = `history_${qs}`;
+  const cached = getCached(cacheKey);
+  if (cached) return cached;
+  
+  const data = await apiFetch(`/history?${qs}`);
+  setCache(cacheKey, data);
+  return data;
 }
 
 // ─── Notifications ─────────────────────────────────────────────────────────
@@ -121,17 +162,72 @@ export async function getHistoryItem(id) {
 }
 
 export async function deleteHistoryItem(id) {
-  return apiFetch(`/history/${id}`, { method: "DELETE" });
+  const res = await apiFetch(`/history/${id}`, { method: "DELETE" });
+  cache.clear(); // invalidate cache on delete
+  return res;
+}
+
+export async function resolveHistoryItem(id) {
+  const res = await apiFetch(`/history/${id}/resolve`, { method: "PATCH" });
+  cache.clear(); // invalidate cache on resolution
+  return res;
 }
 
 export async function clearAllHistory() {
-  return apiFetch(`/history`, { method: "DELETE" });
+  const res = await apiFetch("/history", { method: "DELETE" });
+  cache.clear(); // invalidate cache
+  return res;
 }
 
-// ─── Stats ─────────────────────────────────────────────────────────────────
-
+// ─── Stats & Heatmap ────────────────────────────────────────────────────────
 export async function getStats() {
-  return apiFetch("/stats");
+  const cacheKey = "stats";
+  const cached = getCached(cacheKey);
+  if (cached) return cached;
+  
+  const data = await apiFetch("/stats");
+  setCache(cacheKey, data);
+  return data;
+}
+
+export async function getHeatmapStats(limit = 8) {
+  const cacheKey = `heatmap_${limit}`;
+  const cached = getCached(cacheKey);
+  if (cached) return cached;
+  
+  const data = await apiFetch(`/stats/heatmap?limit=${limit}`);
+  setCache(cacheKey, data);
+  return data;
+}
+
+// ─── Simple Cache ──────────────────────────────────────────────────────────
+const cache = new Map();
+const CACHE_TTL = 30000; // 30 seconds
+
+function getCached(key) {
+  const item = cache.get(key);
+  if (item && Date.now() - item.timestamp < CACHE_TTL) {
+    return item.data;
+  }
+  return null;
+}
+
+function setCache(key, data) {
+  cache.set(key, { data, timestamp: Date.now() });
+}
+
+// ─── Settings ─────────────────────────────────────────────────────────────
+
+export async function getSettings() {
+  return apiFetch("/settings");
+}
+
+export async function saveSettings(data) {
+  return apiFetch("/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
 }
 
 // ─── Downloads ─────────────────────────────────────────────────────────────
