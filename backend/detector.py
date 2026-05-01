@@ -54,6 +54,8 @@ def detect(frame: np.ndarray) -> list[dict]:
     """
     import tempfile
 
+    from gradio_client import handle_file
+
     # Save frame as temp jpg for API upload
     tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
     cv2.imwrite(tmp.name, frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
@@ -61,7 +63,8 @@ def detect(frame: np.ndarray) -> list[dict]:
 
     try:
         client = _get_client()
-        result = client.predict(tmp.name, api_name="/detect")
+        # In Gradio 4+, we must wrap local file paths in handle_file()
+        result = client.predict(handle_file(tmp.name), api_name="/predict")
         print(f"[detector] API Raw Result type: {type(result)} | value snippet: {str(result)[:200]}")
 
         # Gradio can return a string, a dict, or a file path
