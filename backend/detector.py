@@ -64,7 +64,7 @@ def detect(frame: np.ndarray) -> list[dict]:
     try:
         client = _get_client()
         # In Gradio 4+, we must wrap local file paths in handle_file()
-        result = client.predict(handle_file(tmp.name), api_name="/predict")
+        result = client.predict(handle_file(tmp.name), api_name="/detect")
         print(f"[detector] API Raw Result type: {type(result)} | value snippet: {str(result)[:200]}")
 
         # Gradio can return a string, a dict, or a file path
