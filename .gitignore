@@ -8,9 +8,9 @@ backend/.pytest_cache/
 *.pyo
 *.pyd
 
-# # Ignore downloaded model weights
-# backend/models/*.pt
-# backend/models/*.onnx
+# Ignore downloaded model weights
+backend/models/*.pt
+backend/models/*.onnx
 
 # Ignore generated analysis outputs
 backend/outputs/*
