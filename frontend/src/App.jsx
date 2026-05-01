@@ -8,13 +8,11 @@ import { Settings } from "./pages/Settings";
 import { SingleAnalysis } from "./pages/SingleAnalysis";
 import LandingPage from "./pages/LandingPage";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
-import { AuthProvider } from "./contexts/AuthContext";
 
 export default function App() {
   return (
     <ErrorBoundary>
-      <AuthProvider>
-        <Routes>
+      <Routes>
         {/* Landing page */}
         <Route path="/" element={<LandingPage />} />
 
@@ -30,7 +28,6 @@ export default function App() {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-      </AuthProvider>
     </ErrorBoundary>
   );
 }

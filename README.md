@@ -145,8 +145,7 @@ RetailEye/
 │   ├── report_generator.py   ← JSON + CSV export utilities
 │   ├── database.py           ← asyncpg PostgreSQL layer (Neon DB compatible)
 │   ├── auth.py               ← JWT / session authentication
-│   ├── requirements.txt
-│   └── Dockerfile
+│   └── requirements.txt
 ├── frontend/
 │   └── src/
 │       ├── App.jsx           ← Root component, routing
@@ -268,7 +267,7 @@ python pipeline.py samples/retail.jpg --output results.json
 
 ## 🚀 Deployment
 
-### Backend — Render.com (Docker)
+### Backend — Render.com
 
 `render.yaml` is pre-configured for one-click deploy:
 
@@ -276,8 +275,9 @@ python pipeline.py samples/retail.jpg --output results.json
 services:
   - type: web
     name: retaileye-backend
-    runtime: docker
-    dockerfilePath: ./backend/Dockerfile
+    runtime: python
+    buildCommand: "pip install -r backend/requirements.txt"
+    startCommand: "cd backend && uvicorn main:app --host 0.0.0.0 --port 10000"
     plan: starter        # 512MB RAM — required for YOLO model loading
 ```
 
@@ -321,7 +321,7 @@ Set in Vercel dashboard:
 | Image Processing | OpenCV, Pillow, NumPy |
 | Frontend | React 18, Vite, TailwindCSS, Recharts, Framer Motion |
 | Database | PostgreSQL via Neon DB — asyncpg, JSONB |
-| Deployment (backend) | Render.com — Docker container |
+| Deployment (backend) | Render.com — Python environment |
 | Deployment (frontend) | Vercel — static SPA |
 
 ---

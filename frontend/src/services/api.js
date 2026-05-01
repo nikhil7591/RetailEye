@@ -5,19 +5,11 @@
 
 export const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
-let authToken = null;
-export function setAuthToken(token) {
-  authToken = token;
-}
-
 export async function apiFetch(endpoint, options = {}) {
   const headers = {
     ...options.headers,
   };
-  
-  if (authToken) {
-    headers["Authorization"] = `Bearer ${authToken}`;
-  }
+
 
   const response = await fetch(`${BASE_URL}${endpoint}`, {
     ...options,
@@ -52,9 +44,6 @@ export async function analyzeImage(file, onProgress) {
 
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `${BASE_URL}/analyze/image`);
-    if (authToken) {
-      xhr.setRequestHeader("Authorization", `Bearer ${authToken}`);
-    }
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) {
@@ -96,9 +85,6 @@ export async function analyzeVideo(file, onProgress) {
 
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `${BASE_URL}/analyze/video`);
-    if (authToken) {
-      xhr.setRequestHeader("Authorization", `Bearer ${authToken}`);
-    }
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) {

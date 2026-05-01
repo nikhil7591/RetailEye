@@ -8,5 +8,3 @@ Pillow
 numpy
 asyncpg
 gradio_client
-PyJWT
-bcrypt

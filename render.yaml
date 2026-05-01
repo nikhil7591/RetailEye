@@ -2,9 +2,9 @@ services:
   # ── Backend (FastAPI + YOLO) ──────────────────────────────
   - type: web
     name: retaileye-backend
-    runtime: docker
-    dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
+    runtime: python
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port 10000
     plan: starter  # $7/mo — 512MB RAM, needed for YOLO models
     envVars:
       - key: DATABASE_URL
