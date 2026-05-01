@@ -11,21 +11,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Install PyTorch CPU-only FIRST (saves ~1.5GB vs full CUDA version)
-RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
-
-# Install remaining Python deps
+# Install Python deps (no PyTorch — models run on HF Space)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
 
-# Create directories for outputs and models
-RUN mkdir -p outputs models
+# Create directories for outputs
+RUN mkdir -p outputs
 
-# Expose port — Render sets $PORT automatically
 EXPOSE 10000
 
-# Start the server
 CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-10000}"]

@@ -1,13 +1,12 @@
 fastapi
 uvicorn[standard]
 python-multipart
-ultralytics
 opencv-python-headless
 groq
 python-dotenv
 Pillow
 numpy
 asyncpg
-huggingface_hub
+gradio_client
 PyJWT
 bcrypt
