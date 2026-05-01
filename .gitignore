@@ -9,6 +9,7 @@ backend/.pytest_cache/
 *.pyd
 
 # Ignore downloaded model weights
+backend/models/
 backend/models/*.pt
 backend/models/*.onnx
 
