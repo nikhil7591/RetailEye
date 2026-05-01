@@ -25,13 +25,6 @@ export async function apiFetch(endpoint, options = {}) {
   });
 
   if (!response.ok) {
-    if (response.status === 401) {
-      // Clear token and redirect if unauthorized
-      setAuthToken(null);
-      localStorage.removeItem("retaileye:token");
-      localStorage.removeItem("retaileye:user");
-      window.location.href = "/login";
-    }
     let msg = "API Error";
     try {
       const errData = await response.json();

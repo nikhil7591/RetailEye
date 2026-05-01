@@ -8,15 +8,7 @@ import { Settings } from "./pages/Settings";
 import { SingleAnalysis } from "./pages/SingleAnalysis";
 import LandingPage from "./pages/LandingPage";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
-import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import { Login } from "./pages/Login";
-import { Register } from "./pages/Register";
-
-function ProtectedRoute({ children }) {
-  const { user } = useAuth();
-  if (!user) return <Navigate to="/login" replace />;
-  return children;
-}
+import { AuthProvider } from "./contexts/AuthContext";
 
 export default function App() {
   return (
@@ -25,15 +17,9 @@ export default function App() {
         <Routes>
         {/* Landing page */}
         <Route path="/" element={<LandingPage />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
 
         {/* Dashboard routes */}
-        <Route path="/dashboard" element={
-          <ProtectedRoute>
-            <DashboardLayout />
-          </ProtectedRoute>
-        }>
+        <Route path="/dashboard" element={<DashboardLayout />}>
           <Route index element={<Dashboard />} />
           <Route path="history" element={<History />} />
           <Route path="reports" element={<Reports />} />
@@ -48,3 +34,4 @@ export default function App() {
     </ErrorBoundary>
   );
 }
+

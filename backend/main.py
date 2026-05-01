@@ -31,7 +31,7 @@ from analysis_engine import analyze
 from overlay import draw_overlay
 from report_generator import save_json, save_csv
 from video_processor import process_video
-from auth import hash_password, verify_password, create_access_token, get_current_user
+# Auth removed — open access mode
 
 # ---------------------------------------------------------------------------
 # Load environment variables
@@ -342,51 +342,19 @@ def _compute_shelf_score(report: dict) -> int:
     return min(100, int(round(base)))
 
 # ---------------------------------------------------------------------------
-# Auth Routes
+# Default user (auth removed)
 # ---------------------------------------------------------------------------
-class RegisterRequest(BaseModel):
-    email: str
-    password: str
-    name: str
-
-class LoginRequest(BaseModel):
-    email: str
-    password: str
-
-@app.post("/auth/register")
-async def register(req: RegisterRequest):
-    if await db.users.find_one({"email": req.email}):
-        raise HTTPException(status_code=400, detail="Email already registered")
-    
-    user_doc = {
-        "email": req.email,
-        "name": req.name,
-        "password_hash": hash_password(req.password),
-        "created_at": datetime.now(timezone.utc).isoformat()
-    }
-    result = await db.users.insert_one(user_doc)
-    
-    token = create_access_token({"sub": str(result.inserted_id)})
-    return {"token": token, "user": {"id": str(result.inserted_id), "email": req.email, "name": req.name}}
-
-@app.post("/auth/login")
-async def login(req: LoginRequest):
-    user = await db.users.find_one({"email": req.email})
-    if not user or not verify_password(req.password, user["password_hash"]):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-    
-    token = create_access_token({"sub": str(user["_id"])})
-    return {"token": token, "user": {"id": str(user["_id"]), "email": user["email"], "name": user.get("name", "")}}
+DEFAULT_USER_ID = "default"
 
 # ---------------------------------------------------------------------------
 # Routes — Settings
 # ---------------------------------------------------------------------------
 @app.get("/settings")
-async def get_settings_route(user_id: str = Depends(get_current_user)):
+async def get_settings_route():
     return await _get_settings()
 
 @app.post("/settings")
-async def update_settings_route(settings: dict, user_id: str = Depends(get_current_user)):
+async def update_settings_route(settings: dict):
     await db.settings.replace_one({}, settings, upsert=True)
     return {"status": "saved"}
 
@@ -400,7 +368,8 @@ async def health():
 
 
 @app.post("/analyze/image")
-async def analyze_image(file: UploadFile = File(...), store_id: str = Query(None), user_id: str = Depends(get_current_user)):
+async def analyze_image(file: UploadFile = File(...), store_id: str = Query(None)):
+    user_id = DEFAULT_USER_ID
     _log(f"📥 Received image: {file.filename}")
     try:
         contents = await file.read()
@@ -466,7 +435,8 @@ async def analyze_image(file: UploadFile = File(...), store_id: str = Query(None
 
 
 @app.post("/analyze/video")
-async def analyze_video(file: UploadFile = File(...), store_id: str = Query(None), user_id: str = Depends(get_current_user)):
+async def analyze_video(file: UploadFile = File(...), store_id: str = Query(None)):
+    user_id = DEFAULT_USER_ID
     _log(f"🎬 Received video: {file.filename}")
     try:
         suffix = os.path.splitext(file.filename or "video.mp4")[1] or ".mp4"
@@ -534,8 +504,8 @@ async def analyze_video(file: UploadFile = File(...), store_id: str = Query(None
 # Routes — History (MongoDB CRUD)
 # ---------------------------------------------------------------------------
 @app.get("/history")
-async def get_history(limit: int = 50, skip: int = 0, store_id: str = Query(None), user_id: str = Depends(get_current_user)):
-    query = {"user_id": user_id}
+async def get_history(limit: int = 50, skip: int = 0, store_id: str = Query(None)):
+    query = {"user_id": DEFAULT_USER_ID}
     if store_id:
         query["store_id"] = store_id
     cursor = db.analyses.find(query, {"report._raw_rows": 0}).sort("created_at", -1).skip(skip).limit(limit)
@@ -547,25 +517,25 @@ async def get_history(limit: int = 50, skip: int = 0, store_id: str = Query(None
 
 
 @app.get("/history/{analysis_id}")
-async def get_history_item(analysis_id: str, user_id: str = Depends(get_current_user)):
+async def get_history_item(analysis_id: str):
     try:
         oid = ObjectId(analysis_id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid ID format")
-    doc = await db.analyses.find_one({"_id": oid, "user_id": user_id})
+    doc = await db.analyses.find_one({"_id": oid, "user_id": DEFAULT_USER_ID})
     if not doc:
         raise HTTPException(status_code=404, detail="Analysis not found")
     return JSONResponse(_oid_to_str(doc))
 
 
 @app.patch("/history/{analysis_id}/resolve")
-async def resolve_history_alert(analysis_id: str, user_id: str = Depends(get_current_user)):
+async def resolve_history_alert(analysis_id: str):
     try:
         oid = ObjectId(analysis_id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid ID format")
     result = await db.analyses.update_one(
-        {"_id": oid, "user_id": user_id},
+        {"_id": oid, "user_id": DEFAULT_USER_ID},
         {"$set": {"alert_resolved": True, "resolved_at": datetime.now(timezone.utc).isoformat()}},
     )
     if result.matched_count == 0:
@@ -574,13 +544,13 @@ async def resolve_history_alert(analysis_id: str, user_id: str = Depends(get_cur
 
 
 @app.delete("/history/{analysis_id}")
-async def delete_history_item(analysis_id: str, user_id: str = Depends(get_current_user)):
+async def delete_history_item(analysis_id: str):
     try:
         oid = ObjectId(analysis_id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid ID format")
     # Fetch doc first to clean up output files
-    doc = await db.analyses.find_one({"_id": oid, "user_id": user_id})
+    doc = await db.analyses.find_one({"_id": oid, "user_id": DEFAULT_USER_ID})
     if not doc:
         raise HTTPException(status_code=404, detail="Analysis not found")
     # Delete associated output files from disk
@@ -594,13 +564,13 @@ async def delete_history_item(analysis_id: str, user_id: str = Depends(get_curre
                     _log(f"🗑️  Deleted file: {abs_path}")
                 except OSError:
                     pass
-    await db.analyses.delete_one({"_id": oid, "user_id": user_id})
+    await db.analyses.delete_one({"_id": oid, "user_id": DEFAULT_USER_ID})
     return JSONResponse({"status": "deleted", "id": analysis_id})
 
 
 @app.delete("/history")
-async def clear_all_history(user_id: str = Depends(get_current_user)):
-    result = await db.analyses.delete_many({"user_id": user_id})
+async def clear_all_history():
+    result = await db.analyses.delete_many({"user_id": DEFAULT_USER_ID})
     return JSONResponse({"status": "cleared", "deleted_count": result.deleted_count})
 
 
@@ -608,9 +578,9 @@ async def clear_all_history(user_id: str = Depends(get_current_user)):
 # Routes — Notifications
 # ---------------------------------------------------------------------------
 @app.get("/notifications")
-async def get_notifications(user_id: str = Depends(get_current_user), limit: int = 10):
+async def get_notifications(limit: int = 10):
     query = {
-        "user_id": user_id,
+        "user_id": DEFAULT_USER_ID,
         "report.overall_alert": {"$in": ["Critical", "Warning"]},
         "alert_resolved": {"$ne": True},
     }
@@ -640,7 +610,7 @@ async def get_notifications(user_id: str = Depends(get_current_user), limit: int
 # Routes — Stats (for Dashboard KPIs)
 # ---------------------------------------------------------------------------
 @app.get("/stats")
-async def get_stats(user_id: str = Depends(get_current_user)):
+async def get_stats():
     total = await db.analyses.count_documents({})
     if total == 0:
         return JSONResponse({
@@ -682,7 +652,7 @@ async def get_stats(user_id: str = Depends(get_current_user)):
 # Routes — Heatmap Stats
 # ---------------------------------------------------------------------------
 @app.get("/stats/heatmap")
-async def get_heatmap(limit: int = 8, user_id: str = Depends(get_current_user)):
+async def get_heatmap(limit: int = 8):
     """Per-row occupancy history across recent analyses for the heatmap widget."""
     cursor = db.analyses.find(
         {}, {"report.rows": 1, "created_at": 1}
@@ -718,7 +688,7 @@ async def get_heatmap(limit: int = 8, user_id: str = Depends(get_current_user)):
 
 
 @app.get("/download/{analysis_id}/json")
-async def download_by_id_json(analysis_id: str, user_id: str = Depends(get_current_user)):
+async def download_by_id_json(analysis_id: str):
     try:
         oid = ObjectId(analysis_id)
     except Exception:
@@ -734,7 +704,7 @@ async def download_by_id_json(analysis_id: str, user_id: str = Depends(get_curre
 
 
 @app.get("/download/{analysis_id}/csv")
-async def download_by_id_csv(analysis_id: str, user_id: str = Depends(get_current_user)):
+async def download_by_id_csv(analysis_id: str):
     try:
         oid = ObjectId(analysis_id)
     except Exception:
