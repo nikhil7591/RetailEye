@@ -7,10 +7,8 @@ services:
     dockerContext: ./backend
     plan: starter  # $7/mo — 512MB RAM, needed for YOLO models
     envVars:
-      - key: MONGO_URI
-        sync: false  # Set manually in Render dashboard
-      - key: MONGO_DB
-        value: retaileye
+      - key: DATABASE_URL
+        sync: false  # Set manually in Render dashboard (Neon DB URL)
       - key: GROQ_API_KEY
         sync: false  # Set manually in Render dashboard
       - key: CORS_ORIGINS
