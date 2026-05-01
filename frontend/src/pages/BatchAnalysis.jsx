@@ -144,11 +144,11 @@ export function BatchAnalysis() {
           <CardHeader className="py-4 border-b border-[#E2E8F0]">
             <CardTitle className="text-[12px] font-bold tracking-wider text-[#0F172A] uppercase">Batch Summary</CardTitle>
           </CardHeader>
-          <CardContent className="p-5 overflow-auto">
-            <table className="w-full text-sm">
+          <CardContent className="p-0 sm:p-5 overflow-x-auto">
+            <table className="w-full min-w-[600px] text-sm">
               <thead>
-                <tr className="text-[11px] font-bold text-[#64748B] uppercase">
-                  <th className="text-left pb-3">File</th>
+                <tr className="text-[11px] font-bold text-[#64748B] uppercase border-b border-[#E2E8F0] sm:border-0">
+                  <th className="text-left py-3 px-4 sm:px-0">File</th>
                   <th className="text-center pb-3">Shelf Score</th>
                   <th className="text-center pb-3">Occupancy</th>
                   <th className="text-center pb-3">Empty Slots</th>
@@ -163,8 +163,8 @@ export function BatchAnalysis() {
                   const empty = r.report?.total_empty_slots ?? 0;
                   const alert = r.report?.overall_alert ?? "OK";
                   return (
-                    <tr key={entry.id} className="border-t border-[#F1F5F9] hover:bg-[#F8FAFC]">
-                      <td className="py-3 font-semibold text-[#334155]">{entry.name}</td>
+                    <tr key={entry.id} className="border-b border-[#F1F5F9] sm:border-t sm:border-b-0 hover:bg-[#F8FAFC]">
+                      <td className="py-3 px-4 sm:px-0 font-semibold text-[#334155]">{entry.name}</td>
                       <td className="py-3 text-center font-bold text-[#4F46E5]">{r.shelf_score}/100</td>
                       <td className="py-3 text-center text-[#64748B]">{occ}%</td>
                       <td className="py-3 text-center text-[#64748B]">{empty}</td>
@@ -174,7 +174,7 @@ export function BatchAnalysis() {
                           alert === "Warning" ? "bg-[#FEF3C7] text-[#D97706]" : "bg-[#DCFCE7] text-[#16A34A]"
                         )}>{alert}</span>
                       </td>
-                      <td className="py-3 text-right">
+                      <td className="py-3 px-4 sm:px-0 text-right">
                         {r._id && (
                           <a href={getDownloadUrl(r._id, "csv")} download>
                             <button className="p-1.5 text-[#94A3B8] hover:text-[#4F46E5] transition-colors">

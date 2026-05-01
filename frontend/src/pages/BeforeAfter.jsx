@@ -138,7 +138,7 @@ export function BeforeAfter() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <UploadSlot label="Before" result={before} onFile={handleBefore} loading={loadingBefore} />
         <UploadSlot label="After"  result={after}  onFile={handleAfter}  loading={loadingAfter}  />
       </div>
@@ -152,7 +152,7 @@ export function BeforeAfter() {
               Comparison Summary
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-6 grid grid-cols-3 gap-6">
+          <CardContent className="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
               { label: "Shelf Score Change", value: scoreDiff, unit: "pts", positive: scoreDiff > 0 },
               { label: "Occupancy Change", value: occDiff, unit: "%", positive: Number(occDiff) > 0 },

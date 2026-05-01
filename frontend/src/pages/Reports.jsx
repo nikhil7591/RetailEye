@@ -68,7 +68,7 @@ export function Reports() {
 
       {/* Charts */}
       {chartData.length > 0 ? (
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card className="border-[#E2E8F0]">
             <CardHeader className="py-4 border-b border-[#E2E8F0]">
               <CardTitle className="text-[12px] font-bold tracking-wider text-[#0F172A] uppercase">Shelf Score Over Time</CardTitle>
@@ -130,8 +130,8 @@ export function Reports() {
           <CardHeader className="py-4 border-b border-[#E2E8F0]">
             <CardTitle className="text-[12px] font-bold tracking-wider text-[#0F172A] uppercase">Downloadable Reports</CardTitle>
           </CardHeader>
-          <CardContent className="p-0">
-            <table className="w-full">
+          <CardContent className="p-0 overflow-x-auto">
+            <table className="w-full min-w-[600px]">
               <thead>
                 <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
                   {["File", "Date", "Score", "Alert", "Download"].map(h => (

@@ -71,20 +71,20 @@ function IdleLanding({ onFileSelected, activeTab, setActiveTab }) {
   ];
 
   return (
-    <div className="flex flex-col items-center justify-start pt-8 min-h-[70vh] gap-8">
+    <div className="flex flex-col items-center justify-start pt-4 md:pt-8 min-h-[70vh] gap-6 md:gap-8">
       {/* Hero Section */}
-      <div className="text-center max-w-2xl">
-        <div className="flex items-center justify-center gap-3 mb-4">
-          <Eye className="h-10 w-10 text-[#4F46E5]" />
-          <h1 className="text-4xl font-bold text-[#0F172A]">
+      <div className="text-center max-w-2xl px-2">
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-2 md:gap-3 mb-3 md:mb-4">
+          <Eye className="h-8 w-8 md:h-10 md:w-10 text-[#4F46E5]" />
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-[#0F172A]">
             Retail<span className="text-[#4F46E5]">Eye</span>
           </h1>
         </div>
-        <p className="text-lg text-[#334155] font-medium leading-relaxed">
+        <p className="text-sm md:text-lg text-[#334155] font-medium leading-relaxed px-2">
           AI-powered shelf intelligence platform. Upload a shelf image or video
           and get instant occupancy analysis, product detection, and restock recommendations.
         </p>
-        <div className="flex items-center justify-center gap-6 mt-4 text-sm text-[#64748B]">
+        <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-6 mt-3 md:mt-4 text-xs sm:text-sm text-[#64748B]">
           <span className="flex items-center gap-1.5"><Zap className="h-4 w-4 text-[#4F46E5]" /> Smart Detection</span>
           <span className="flex items-center gap-1.5"><BarChart3 className="h-4 w-4 text-[#22C55E]" /> Occupancy Analytics</span>
           <span className="flex items-center gap-1.5"><Shield className="h-4 w-4 text-[#F59E0B]" /> AI Vision</span>
@@ -92,10 +92,10 @@ function IdleLanding({ onFileSelected, activeTab, setActiveTab }) {
       </div>
 
       {/* Tab Switcher */}
-      <div className="flex items-center gap-1 bg-white p-1 rounded-xl shadow-sm border border-[#E2E8F0]">
+      <div className="flex flex-wrap items-center justify-center gap-1 bg-white p-1 rounded-xl shadow-sm border border-[#E2E8F0]">
         {tabs.map(t => (
           <button key={t.key} onClick={() => setActiveTab(t.key)}
-            className={cn("px-5 py-2.5 text-sm font-semibold rounded-lg transition-colors",
+            className={cn("px-3 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold rounded-lg transition-colors",
               activeTab === t.key ? "bg-[#EEF2FF] text-[#4F46E5]" : "text-[#64748B] hover:text-[#0F172A]")}>
             {t.label}
           </button>
@@ -107,7 +107,7 @@ function IdleLanding({ onFileSelected, activeTab, setActiveTab }) {
         {activeTab === "single" && (
           <div
             className={cn(
-              "w-full max-w-2xl mx-auto flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-14 text-center transition-all cursor-pointer",
+              "w-full max-w-2xl mx-auto flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-8 sm:p-14 text-center transition-all cursor-pointer",
               isDragging ? "border-[#4F46E5] bg-[#EEF2FF] scale-[1.02]" : "border-[#C7D2FE] bg-white hover:border-[#4F46E5] hover:bg-[#EEF2FF]/30"
             )}
             onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
@@ -309,14 +309,14 @@ export function Dashboard() {
     <div className="flex flex-col gap-6 pb-8">
       <KPICards metrics={metrics} historyItems={history} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-6 h-[450px] overflow-hidden">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 md:gap-6">
+        <div className="md:col-span-2 lg:col-span-6 h-auto md:h-[420px] lg:h-[470px]">
           <OutputPreview imageSrc={imageSrc} detections={detections} isAnalyzed={!!imageSrc} />
         </div>
-        <div className="lg:col-span-3 h-[450px]">
+        <div className="lg:col-span-3 h-[320px] sm:h-[420px] lg:h-[470px]">
           <RowBreakdown rows={mapRows(reportRows)} />
         </div>
-        <div className="lg:col-span-3 h-[450px] overflow-y-auto custom-scrollbar">
+        <div className="lg:col-span-3 h-[320px] sm:h-[420px] lg:h-[470px]">
           <ShelfHealthScore
             score={latestResult?.shelf_score ?? stats?.avg_shelf_score ?? 0}
             label={(latestResult?.shelf_score ?? 0) >= 80 ? "GOOD" : (latestResult?.shelf_score ?? 0) >= 50 ? "FAIR" : "CRITICAL"}
@@ -324,10 +324,10 @@ export function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-4 h-[450px] overflow-y-auto custom-scrollbar"><RestockSuggestions items={mapSuggestions(reportRows)} /></div>
-        <div className="lg:col-span-4 h-[450px] overflow-y-auto custom-scrollbar"><Heatmap rows={reportRows} /></div>
-        <div className="lg:col-span-4 h-[450px] overflow-y-auto custom-scrollbar"><RestockPriority priorityData={mapPriority(latestResult?.report?.restock_priority ?? [])} /></div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 md:gap-6">
+        <div className="md:col-span-1 lg:col-span-4 h-[320px] sm:h-[420px] lg:h-[470px]"><RestockSuggestions items={mapSuggestions(reportRows)} /></div>
+        <div className="md:col-span-1 lg:col-span-4 h-[320px] sm:h-[420px] lg:h-[470px]"><Heatmap rows={reportRows} /></div>
+        <div className="md:col-span-2 lg:col-span-4 h-[320px] sm:h-[420px] lg:h-[470px]"><RestockPriority priorityData={mapPriority(latestResult?.report?.restock_priority ?? [])} /></div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

@@ -98,7 +98,7 @@ export function SingleAnalysis() {
       {state === "idle" && (
         <div
           className={cn(
-            "flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-14 text-center transition-all cursor-pointer",
+            "flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-8 sm:p-14 text-center transition-all cursor-pointer",
             isDragging ? "border-[#4F46E5] bg-[#EEF2FF]" : "border-[#C7D2FE] bg-[#EEF2FF]/30 hover:border-[#4F46E5]"
           )}
           onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
@@ -150,17 +150,20 @@ export function SingleAnalysis() {
       {state === "done" && result && (
         <div className="flex flex-col gap-6">
           {/* Score banner */}
-          <div className="flex items-center gap-6 p-5 rounded-2xl bg-[#F8FAFC] border border-[#E2E8F0]">
-            <CheckCircle2 className="h-8 w-8 text-[#22C55E] shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-[#64748B]">Analysis Complete</p>
-              <p className="text-xs text-[#94A3B8] mt-0.5">{result.report?.timestamp ? new Date(result.report.timestamp).toLocaleString() : "Just now"}</p>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6 p-4 sm:p-5 rounded-2xl bg-[#F8FAFC] border border-[#E2E8F0]">
+            <div className="flex items-center gap-4 w-full sm:w-auto flex-1">
+              <CheckCircle2 className="h-8 w-8 text-[#22C55E] shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-[#64748B]">Analysis Complete</p>
+                <p className="text-xs text-[#94A3B8] mt-0.5">{result.report?.timestamp ? new Date(result.report.timestamp).toLocaleString() : "Just now"}</p>
+              </div>
             </div>
-            <div className="text-right">
-              <p className="text-3xl font-bold text-[#4F46E5]">{shelfScore}<span className="text-base text-[#94A3B8] font-normal">/100</span></p>
-              <p className="text-xs font-semibold text-[#64748B] mt-0.5">Shelf Score</p>
-            </div>
-            <div className="flex gap-2">
+            <div className="flex items-center justify-between sm:justify-end w-full sm:w-auto gap-6 sm:gap-8 border-t sm:border-t-0 border-[#E2E8F0] pt-4 sm:pt-0">
+              <div className="text-left sm:text-right">
+                <p className="text-2xl sm:text-3xl font-bold text-[#4F46E5]">{shelfScore}<span className="text-sm sm:text-base text-[#94A3B8] font-normal">/100</span></p>
+                <p className="text-[10px] sm:text-xs font-semibold text-[#64748B] mt-0.5">Shelf Score</p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2">
               {result.report_json_url && (
                 <a href={result._id ? getDownloadUrl(result._id, "json") : `${BASE_URL}${result.report_json_url}`} download>
                   <Button variant="outline" size="sm" className="gap-1 text-xs"><Download className="h-3.5 w-3.5" /> JSON</Button>
@@ -171,13 +174,14 @@ export function SingleAnalysis() {
                   <Button variant="outline" size="sm" className="gap-1 text-xs"><Download className="h-3.5 w-3.5" /> CSV</Button>
                 </a>
               )}
+              </div>
             </div>
           </div>
 
           {/* Image + row breakdown */}
-          <div className="grid grid-cols-12 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Annotated Image */}
-            <div className="col-span-7">
+            <div className="lg:col-span-7">
               <Card className="border-[#E2E8F0] h-full">
                 <CardHeader className="py-4 border-b border-[#E2E8F0] flex flex-row items-center justify-between">
                   <CardTitle className="text-[12px] font-bold tracking-wider text-[#0F172A] uppercase">Annotated Output</CardTitle>
@@ -232,7 +236,7 @@ export function SingleAnalysis() {
             </div>
 
             {/* Row Breakdown */}
-            <div className="col-span-5">
+            <div className="lg:col-span-5">
               <Card className="border-[#E2E8F0] h-full">
                 <CardHeader className="py-4 border-b border-[#E2E8F0]">
                   <CardTitle className="text-[12px] font-bold tracking-wider text-[#0F172A] uppercase">Row Breakdown</CardTitle>
@@ -285,7 +289,7 @@ export function SingleAnalysis() {
           </div>
 
           {/* Stats row */}
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {[
               { label: "Shelf Score", value: `${shelfScore}/100`, color: "#4F46E5" },
               { label: "Occupancy", value: `${result.report?.overall_occupancy ?? 0}%`, color: "#F59E0B" },

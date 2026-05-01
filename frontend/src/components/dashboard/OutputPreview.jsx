@@ -142,7 +142,7 @@ export function OutputPreview({ imageSrc, detections = [], isAnalyzed = false })
   return (
     <>
       <Card className="flex flex-col h-full border-[#E2E8F0]">
-        <CardHeader className="flex flex-row items-center justify-between py-4 border-b border-[#E2E8F0]">
+        <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between py-4 border-b border-[#E2E8F0] gap-3 sm:gap-0">
           <CardTitle className="text-[12px] font-bold tracking-wider text-[#0F172A] uppercase">
             OUTPUT PHOTO WITH LABELS
           </CardTitle>
@@ -160,7 +160,7 @@ export function OutputPreview({ imageSrc, detections = [], isAnalyzed = false })
 
         <CardContent className="flex-1 p-5 flex flex-col gap-4">
           {/* Image area */}
-          <div className="relative w-full flex-1 min-h-[250px] max-h-[320px] rounded-xl overflow-hidden border border-[#E2E8F0] bg-[#0F172A]">
+          <div className="relative w-full h-[250px] md:h-auto md:flex-1 rounded-xl overflow-hidden border border-[#E2E8F0] bg-[#0F172A]">
             {isAnalyzed && imageSrc ? (
               <ImageWithOverlay />
             ) : (
@@ -177,7 +177,7 @@ export function OutputPreview({ imageSrc, detections = [], isAnalyzed = false })
           </div>
 
           {/* Legend + action row */}
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
             <div className="flex flex-wrap items-center gap-3 text-[11px] font-semibold text-[#64748B]">
               {Object.entries(CATEGORY_COLORS).map(([cat, colors]) => (
                 <div key={cat} className="flex items-center gap-1.5">

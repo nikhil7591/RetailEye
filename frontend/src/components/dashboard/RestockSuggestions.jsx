@@ -15,12 +15,12 @@ export function RestockSuggestions({ items = [] }) {
   }));
 
   return (
-    <Card className="h-full border-[#E2E8F0]">
+    <Card className="h-full flex flex-col overflow-hidden border-[#E2E8F0]">
       <CardHeader className="py-5 border-b border-[#E2E8F0]">
         <CardTitle className="text-[12px] font-bold tracking-wider text-[#0F172A] uppercase">AI RESTOCK SUGGESTIONS</CardTitle>
       </CardHeader>
-      <CardContent className="p-0">
-        <div className="divide-y divide-[#F1F5F9] flex flex-col h-[calc(100%-61px)]">
+      <CardContent className="p-0 flex-1 overflow-y-auto custom-scrollbar">
+        <div className="divide-y divide-[#F1F5F9] flex flex-col">
           {suggestions.length > 0 ? (
             suggestions.map((item, idx) => (
               <div key={idx} className="flex items-center gap-4 p-5 py-6">

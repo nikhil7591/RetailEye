@@ -70,38 +70,43 @@ export function Alerts() {
 
   const AlertCard = ({ alert, level }) => (
     <div className={cn(
-      "flex items-start gap-4 p-5 rounded-xl border transition-all",
+      "flex flex-col sm:flex-row items-start gap-4 p-4 sm:p-5 rounded-xl border transition-all",
       level === "Critical"
         ? "bg-[#FFF5F5] border-[#FCA5A5]"
         : "bg-[#FFFBEB] border-[#FCD34D]"
     )}>
-      {level === "Critical"
-        ? <XCircle className="h-5 w-5 text-[#EF4444] shrink-0 mt-0.5" />
-        : <AlertTriangle className="h-5 w-5 text-[#F59E0B] shrink-0 mt-0.5" />}
-      <div className="flex-1 min-w-0">
+      <div className="flex w-full sm:w-auto items-start justify-between sm:block">
+        {level === "Critical"
+          ? <XCircle className="h-5 w-5 text-[#EF4444] shrink-0 mt-0.5" />
+          : <AlertTriangle className="h-5 w-5 text-[#F59E0B] shrink-0 mt-0.5" />}
+        <span className={cn("sm:hidden text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0",
+          level === "Critical" ? "bg-[#FEE2E2] text-[#DC2626]" : "bg-[#FEF3C7] text-[#D97706]"
+        )}>{level}</span>
+      </div>
+      <div className="flex-1 w-full min-w-0">
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm font-bold text-[#0F172A] truncate">{alert.filename}</p>
-          <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0",
+          <span className={cn("hidden sm:block text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0",
             level === "Critical" ? "bg-[#FEE2E2] text-[#DC2626]" : "bg-[#FEF3C7] text-[#D97706]"
           )}>{level}</span>
         </div>
         <p className="text-xs text-[#64748B] mt-1">{alert.time}</p>
-        <div className="flex items-center gap-4 mt-2 text-xs font-semibold">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2 text-xs font-semibold">
           <span className="text-[#4F46E5]">Score: {alert.score}/100</span>
           <span className="text-[#F59E0B]">Occupancy: {Math.round(alert.occupancy)}%</span>
           <span className="text-[#EF4444]">Empty: {alert.empty}</span>
         </div>
       </div>
-      <div className="flex flex-col gap-2 shrink-0">
+      <div className="flex sm:flex-col gap-2 w-full sm:w-auto shrink-0 mt-2 sm:mt-0">
         <button
           onClick={() => setSelected(alert)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#E2E8F0] bg-white text-xs font-semibold text-[#64748B] hover:bg-[#F1F5F9] transition-colors"
+          className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#E2E8F0] bg-white text-xs font-semibold text-[#64748B] hover:bg-[#F1F5F9] transition-colors"
         >
           <Eye className="h-3.5 w-3.5" /> View
         </button>
         <button
           onClick={() => markResolved(alert._id)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#22C55E] text-xs font-bold text-white hover:bg-[#16A34A] transition-colors"
+          className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#22C55E] text-xs font-bold text-white hover:bg-[#16A34A] transition-colors"
         >
           <CheckCircle2 className="h-3.5 w-3.5" /> Resolve
         </button>
@@ -111,14 +116,14 @@ export function Alerts() {
 
   return (
     <div className="flex flex-col gap-6 pb-8">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-[#0F172A]">Alerts</h1>
           <p className="text-sm text-[#64748B] mt-1">
             {criticals.length} critical · {warnings.length} warnings requiring attention
           </p>
         </div>
-        <div className="flex items-center gap-2 p-3 rounded-xl bg-white border border-[#E2E8F0] shadow-sm">
+        <div className="flex items-center gap-2 p-3 rounded-xl bg-white border border-[#E2E8F0] shadow-sm w-full sm:w-auto justify-center sm:justify-start">
           <Bell className="h-5 w-5 text-[#4F46E5]" />
           <span className="text-sm font-bold text-[#0F172A]">{criticals.length + warnings.length} active</span>
         </div>
@@ -185,7 +190,7 @@ export function Alerts() {
       {selected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-[#0F172A]/40 backdrop-blur-sm" onClick={() => setSelected(null)} />
-          <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl p-6 z-10">
+          <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl p-4 sm:p-6 z-10 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-bold text-[#0F172A]">{selected.filename}</h2>
               <button onClick={() => setSelected(null)} className="p-1.5 rounded-lg hover:bg-[#F1F5F9]">✕</button>

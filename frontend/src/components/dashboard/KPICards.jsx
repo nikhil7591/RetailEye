@@ -1,5 +1,5 @@
 import { Card, CardContent } from "../ui/Card";
-import { AreaChart, Area, ResponsiveContainer } from "recharts";
+import { AreaChart, Area, ResponsiveContainer, YAxis } from "recharts";
 import { Star, AlertCircle, Box, Hexagon } from "lucide-react";
 
 export function KPICards({ metrics, historyItems = [] }) {
@@ -59,47 +59,50 @@ export function KPICards({ metrics, historyItems = [] }) {
   ];
 
   return (
-    <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 sm:gap-6 xl:grid-cols-4">
       {cards.map((card, i) => (
         <Card key={i} className="border-[#E2E8F0]">
-          <CardContent className="p-6 flex flex-col h-full">
-            <div className="flex items-start justify-between">
-              <div>
-                <h3 className="text-xs font-bold text-[#64748B] tracking-wider mb-2">{card.title} ⓘ</h3>
-                <div className="flex items-baseline gap-1">
-                  <span className={`text-4xl font-bold ${card.valueColor || "text-[#0F172A]"}`}>
+          <CardContent className="p-3 sm:p-6 flex flex-col h-full">
+            <div className="flex flex-col sm:flex-row items-start justify-between gap-2 sm:gap-0 relative">
+              <div className="min-w-0 pr-8 sm:pr-0">
+                <h3 className="text-[10px] sm:text-xs font-bold text-[#64748B] tracking-wider mb-1 sm:mb-2 leading-tight">{card.title} <span className="hidden sm:inline">ⓘ</span></h3>
+                <div className="flex items-baseline gap-1 flex-wrap">
+                  <span className={`text-xl sm:text-4xl font-bold ${card.valueColor || "text-[#0F172A]"}`}>
                     {card.value.toString().split(' ')[0]}
                   </span>
                   {card.value.toString().includes(' ') && (
-                    <span className="text-lg font-semibold text-[#64748B]">
+                    <span className="text-sm sm:text-lg font-semibold text-[#64748B]">
                       {card.value.toString().split(' ')[1]}
                     </span>
                   )}
                 </div>
-                <p className="text-[13px] font-medium text-[#64748B] mt-1">{card.subtitle}</p>
+                <p className="text-[10px] sm:text-[13px] font-medium text-[#64748B] mt-0.5 sm:mt-1 leading-tight">{card.subtitle}</p>
               </div>
-              <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${card.iconBg}`}>
-                <card.icon className={`h-5 w-5 ${card.iconColor}`} />
+              <div className={`absolute top-0 right-0 sm:relative flex h-7 w-7 sm:h-10 sm:w-10 items-center justify-center rounded-lg sm:rounded-xl shrink-0 ${card.iconBg}`}>
+                <card.icon className={`h-3.5 w-3.5 sm:h-5 sm:w-5 ${card.iconColor}`} />
               </div>
             </div>
             
             <div className="mt-4 pt-2 h-14 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={card.chartData}>
+                <AreaChart data={card.chartData} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id={`kpiGradient-${i}`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={card.chartColor} stopOpacity={0.35} />
-                      <stop offset="95%" stopColor={card.chartColor} stopOpacity={0.05} />
+                      <stop offset="5%" stopColor={card.chartColor} stopOpacity={0.25} />
+                      <stop offset="95%" stopColor={card.chartColor} stopOpacity={0.01} />
                     </linearGradient>
                   </defs>
                   <Area
                     type="monotone"
                     dataKey="value"
                     stroke={card.chartColor}
-                    strokeWidth={2}
+                    strokeWidth={2.5}
                     fill={`url(#kpiGradient-${i})`}
                     dot={false}
+                    isAnimationActive={true}
+                    baseValue="0"
                   />
+                  <YAxis hide domain={i < 2 ? [0, 100] : [0, "auto"]} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>

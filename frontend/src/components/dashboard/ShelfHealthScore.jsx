@@ -12,14 +12,15 @@ export function ShelfHealthScore({ score = 67, label = "FAIR" }) {
       <CardHeader className="py-5 border-b border-[#E2E8F0]">
         <CardTitle className="text-[12px] font-bold tracking-wider text-[#0F172A] uppercase">SHELF HEALTH SCORE</CardTitle>
       </CardHeader>
-      <CardContent className="p-6 flex flex-col items-center justify-center h-[calc(100%-61px)]">
-        <div className="relative h-[200px] w-[200px] flex items-center justify-center">
+      <CardContent className="p-6 flex items-center justify-center gap-6 sm:gap-8 h-[calc(100%-61px)]">
+        
+        <div className="relative h-36 w-36 sm:h-44 sm:w-44 shrink-0">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
                 data={data}
-                innerRadius={75}
-                outerRadius={95}
+                innerRadius="75%"
+                outerRadius="95%"
                 startAngle={90}
                 endAngle={-270}
                 dataKey="value"
@@ -31,15 +32,17 @@ export function ShelfHealthScore({ score = 67, label = "FAIR" }) {
               </Pie>
             </PieChart>
           </ResponsiveContainer>
-          <div className="absolute flex flex-col items-center justify-center">
-            <span className="text-[44px] font-bold text-[#0F172A] leading-none tracking-tight">{score}</span>
-            <span className="text-[13px] font-semibold text-[#64748B] mt-1">/100</span>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-4xl sm:text-5xl font-bold text-[#0F172A] leading-none tracking-tight">{score}</span>
+            <span className="text-[11px] sm:text-[13px] font-semibold text-[#64748B] mt-1">/100</span>
           </div>
         </div>
-        <div className="mt-8 text-center flex flex-col gap-1">
-          <h3 className="text-[18px] font-bold text-[#F59E0B] tracking-wide uppercase">{label}</h3>
-          <p className="text-[13px] font-medium text-[#64748B]">Shelf Health Score</p>
+
+        <div className="flex flex-col gap-1 items-start justify-center">
+          <h3 className="text-xl sm:text-2xl font-bold text-[#F59E0B] tracking-wide uppercase">{label}</h3>
+          <p className="text-xs sm:text-sm font-medium text-[#64748B]">Shelf Health Score</p>
         </div>
+
       </CardContent>
     </Card>
   );

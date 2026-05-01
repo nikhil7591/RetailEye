@@ -1,9 +1,9 @@
-import { Bell, ChevronDown, Plus } from "lucide-react";
+import { Bell, ChevronDown, Menu, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getNotifications } from "../../services/api";
 
-export function Navbar() {
+export function Navbar({ onMenuToggle }) {
   const location = useLocation();
   const navigate = useNavigate();
   const isDashboard = location.pathname === "/dashboard";
@@ -55,14 +55,21 @@ export function Navbar() {
   }, []);
 
   return (
-    <header className="sticky top-0 z-40 flex h-[72px] w-full items-center justify-between bg-[#F8FAFC] px-6 pt-6">
+    <header className="sticky top-0 z-40 flex h-[64px] md:h-[72px] w-full items-center justify-between bg-[#F8FAFC] px-4 md:px-6 pt-4 md:pt-6">
       
-      {/* Left side — contextual title or empty */}
-      <div className="flex items-center gap-4">
+      {/* Left side — hamburger for mobile + contextual title */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onMenuToggle}
+          className="lg:hidden p-2 rounded-lg text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9] transition-colors"
+          aria-label="Open menu"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
       </div>
 
       {/* Right Actions */}
-      <div className="flex items-center gap-5">
+      <div className="flex items-center gap-3 md:gap-5">
         {/* New Upload button — only shown when NOT on dashboard idle */}
         {isDashboard && (
           <button
@@ -70,10 +77,10 @@ export function Navbar() {
               // Dispatch custom event to tell Dashboard to reset to upload
               window.dispatchEvent(new CustomEvent("retaileye:new-upload"));
             }}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#4F46E5] text-white text-sm font-semibold hover:bg-[#4338CA] transition-colors shadow-sm"
+            className="flex items-center gap-2 px-3 md:px-4 py-2 rounded-lg bg-[#4F46E5] text-white text-xs md:text-sm font-semibold hover:bg-[#4338CA] transition-colors shadow-sm"
           >
             <Plus className="h-4 w-4" />
-            New Upload
+            <span className="hidden sm:inline">New Upload</span>
           </button>
         )}
 
@@ -91,7 +98,7 @@ export function Navbar() {
           </button>
 
           {isNotifOpen && (
-            <div className="absolute right-0 mt-3 w-80 rounded-xl border border-[#E2E8F0] bg-white shadow-[0_10px_30px_-12px_rgba(15,23,42,0.35)]">
+            <div className="absolute right-0 mt-3 w-72 sm:w-80 rounded-xl border border-[#E2E8F0] bg-white shadow-[0_10px_30px_-12px_rgba(15,23,42,0.35)]">
               <div className="flex items-center justify-between px-4 py-3 border-b border-[#E2E8F0]">
                 <span className="text-xs font-bold tracking-wider text-[#0F172A] uppercase">Notifications</span>
                 <span className="text-[10px] font-semibold text-[#64748B]">{notifications.length} new</span>
@@ -124,17 +131,17 @@ export function Navbar() {
           )}
         </div>
 
-        <button className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+        <button className="flex items-center gap-2 md:gap-3 hover:opacity-80 transition-opacity">
           <img 
             src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&backgroundColor=e2e8f0" 
             alt="Admin Avatar" 
-            className="h-9 w-9 rounded-full border border-[#E2E8F0] bg-[#FFFFFF]"
+            className="h-8 w-8 md:h-9 md:w-9 rounded-full border border-[#E2E8F0] bg-[#FFFFFF]"
           />
           <div className="hidden md:flex flex-col items-start">
             <span className="text-sm font-bold text-[#0F172A] leading-none">Admin</span>
             <span className="text-[11px] text-[#64748B] mt-1 leading-none">Retail Admin</span>
           </div>
-          <ChevronDown className="h-4 w-4 text-[#94A3B8]" />
+          <ChevronDown className="h-4 w-4 text-[#94A3B8] hidden sm:block" />
         </button>
       </div>
     </header>

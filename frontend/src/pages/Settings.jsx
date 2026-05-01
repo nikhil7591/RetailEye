@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { CheckCircle2, AlertCircle, Save, Trash2, Server, Database, Activity, Sliders } from "lucide-react";
+import { CheckCircle2, AlertCircle, Save, Trash2, Database, Sliders } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { BASE_URL, clearAllHistory, getSettings, saveSettings } from "../services/api";
@@ -14,13 +14,6 @@ export function Settings() {
   const [saveMsg, setSaveMsg]           = useState(null);
   const [clearing, setClearing]         = useState(false);
   const [clearMsg, setClearMsg]         = useState(null);
-  const [backendStatus, setBackendStatus] = useState("checking"); // checking | online | offline
-
-  useEffect(() => {
-    fetch(`${BASE_URL}/health`)
-      .then(r => r.ok ? setBackendStatus("online") : setBackendStatus("offline"))
-      .catch(() => setBackendStatus("offline"));
-  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -83,24 +76,6 @@ export function Settings() {
     </div>
   );
 
-  const StatusDot = ({ status }) => (
-    <div className="flex items-center gap-2">
-      <span className="relative flex h-2.5 w-2.5">
-        {status === "online" && <span className="animate-ping absolute h-full w-full rounded-full bg-[#22C55E] opacity-75" />}
-        <span className={cn(
-          "relative h-2.5 w-2.5 rounded-full",
-          status === "online" ? "bg-[#22C55E]" : status === "checking" ? "bg-[#F59E0B]" : "bg-[#EF4444]"
-        )} />
-      </span>
-      <span className={cn(
-        "text-xs font-bold",
-        status === "online" ? "text-[#22C55E]" : status === "checking" ? "text-[#F59E0B]" : "text-[#EF4444]"
-      )}>
-        {status === "online" ? "Connected" : status === "checking" ? "Checking..." : "Offline"}
-      </span>
-    </div>
-  );
-
   return (
     <div className="flex flex-col gap-6 pb-8 max-w-3xl">
       <div>
@@ -117,7 +92,7 @@ export function Settings() {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-6 flex flex-col gap-5">
-          <div className="grid grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <InputField label="Store Name" value={storeName} onChange={setStoreName} description="Display name for your store" />
             <InputField label="Store ID" value={storeId} onChange={setStoreId} description="Unique identifier used in reports" />
           </div>
@@ -143,7 +118,7 @@ export function Settings() {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-6 flex flex-col gap-6">
-          <div className="grid grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8">
             {/* Warning */}
             <div className="p-4 rounded-xl bg-[#FFFBEB] border border-[#FCD34D]/30">
               <div className="flex items-center justify-between mb-3">
@@ -175,43 +150,6 @@ export function Settings() {
         </CardContent>
       </Card>
 
-      {/* System Status */}
-      <Card className="border-[#E2E8F0]">
-        <CardHeader className="py-4 border-b border-[#E2E8F0]">
-          <CardTitle className="text-[12px] font-bold tracking-wider text-[#0F172A] uppercase flex items-center gap-2">
-            <Activity className="h-4 w-4 text-[#22C55E]" />
-            System Status
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-6 flex flex-col gap-3">
-          <div className="flex items-center justify-between p-4 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] hover:border-[#C7D2FE] transition-colors">
-            <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-lg bg-[#EEF2FF] flex items-center justify-center">
-                <Server className="h-4 w-4 text-[#4F46E5]" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-[#334155]">Backend Server</p>
-                <p className="text-xs text-[#94A3B8] mt-0.5">{BASE_URL}</p>
-              </div>
-            </div>
-            <StatusDot status={backendStatus} />
-          </div>
-
-          <div className="flex items-center justify-between p-4 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] hover:border-[#C7D2FE] transition-colors">
-            <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-lg bg-[#F0FDF4] flex items-center justify-center">
-                <Database className="h-4 w-4 text-[#22C55E]" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-[#334155]">Database</p>
-                <p className="text-xs text-[#94A3B8] mt-0.5">MongoDB · retaileye</p>
-              </div>
-            </div>
-            <StatusDot status={backendStatus} />
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Danger Zone */}
       <Card className="border-[#FCA5A5]/50">
         <CardHeader className="py-4 border-b border-[#FCA5A5]/30">
@@ -221,7 +159,7 @@ export function Settings() {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-6">
-          <div className="flex items-center justify-between p-4 rounded-xl bg-[#FFF5F5] border border-[#FCA5A5]/30">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-xl bg-[#FFF5F5] border border-[#FCA5A5]/30">
             <div>
               <p className="text-sm font-semibold text-[#0F172A]">Clear All Analysis History</p>
               <p className="text-xs text-[#64748B] mt-0.5">Permanently deletes all analysis records from the database</p>
@@ -229,7 +167,7 @@ export function Settings() {
             <Button
               onClick={handleClearHistory}
               disabled={clearing}
-              className="gap-2 bg-[#EF4444] hover:bg-[#DC2626] text-white shrink-0"
+              className="w-full sm:w-auto gap-2 bg-[#EF4444] hover:bg-[#DC2626] text-white shrink-0"
             >
               {clearing ? "Clearing..." : <><Trash2 className="h-4 w-4" /> Clear History</>}
             </Button>

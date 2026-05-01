@@ -108,7 +108,8 @@ export function History() {
               <p className="text-xs">Upload images to see results here</p>
             </div>
           ) : (
-            <table className="w-full">
+            <div className="overflow-x-auto w-full">
+            <table className="w-full min-w-[700px]">
               <thead>
                 <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
                   {["#", "File Name", "Date & Time", "Shelf Score", "Occupancy", "Empty Slots", "Status", "Actions"].map(h => (
@@ -159,6 +160,7 @@ export function History() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
 
           {/* Pagination */}
