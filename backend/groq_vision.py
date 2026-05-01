@@ -208,36 +208,25 @@ def _call_groq(base64_jpeg: str) -> dict:
             time.sleep(sleep_time)
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
+# Circuit breaker state
+_CIRCUIT_BREAKER_UNTIL = 0.0
 
 def identify_product(crop_image_np: np.ndarray) -> dict:
     """
     Identify a single product from its cropped BGR image.
-
-    Flow:
-        1. Check circuit breaker — if rate-limited, return fallback immediately.
-        2. Send crop to Groq Vision.
-        3. If confidence == "low" → retry with 1.5× zoomed centre crop.
-        4. If still low → return as "Unidentified Product".
-        5. On 429 → trip circuit breaker, return fallback (no further calls).
-        6. On any other API failure → return graceful fallback.
-
-    Parameters
-    ----------
-    crop_image_np : np.ndarray
-        BGR crop of the product region.
-
-    Returns
-    -------
-    dict  with keys: product_name, category, confidence
+    Includes circuit-breaker to stop hammering the API after a 429 rate limit.
     """
+    global _CIRCUIT_BREAKER_UNTIL
+
     fallback = {
         "product_name": "Unidentified Product",
         "category": "Other",
         "confidence": "low",
     }
+
+    # Circuit breaker check
+    if time.time() < _CIRCUIT_BREAKER_UNTIL:
+        return fallback
 
     # Guard: skip tiny / degenerate crops
     if crop_image_np.size == 0 or crop_image_np.shape[0] < 5 or crop_image_np.shape[1] < 5:
@@ -274,7 +263,9 @@ def identify_product(crop_image_np: np.ndarray) -> dict:
         return result
 
     except RateLimitError:
-        # Give up and return fallback after max retries
+        # Trip circuit breaker for 60 seconds
+        print("[groq_vision] 💥 429 Rate Limit hit. Tripping circuit breaker for 60 seconds.")
+        _CIRCUIT_BREAKER_UNTIL = time.time() + 60.0
         return fallback
 
     except Exception:

@@ -62,21 +62,30 @@ def detect(frame: np.ndarray) -> list[dict]:
     try:
         client = _get_client()
         result = client.predict(tmp.name, api_name="/detect")
+        print(f"[detector] API Raw Result type: {type(result)} | value snippet: {str(result)[:200]}")
 
-        # Parse JSON response
+        # Gradio can return a string, a dict, or a file path
+        data = {}
         if isinstance(result, str):
-            data = json.loads(result)
-        else:
+            # Check if result is a file path
+            if os.path.exists(result):
+                with open(result, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            else:
+                data = json.loads(result)
+        elif isinstance(result, dict):
             data = result
 
         detections = data.get("detections", [])
-        n_prod = sum(1 for d in detections if d["class_name"] == "product")
-        n_empty = sum(1 for d in detections if d["class_name"] == "empty_space")
+        n_prod = sum(1 for d in detections if d.get("class_name") == "product")
+        n_empty = sum(1 for d in detections if d.get("class_name") == "empty_space")
         print(f"[detector] 🎯 Remote API: {n_prod} products + {n_empty} empty spaces = {len(detections)} total")
         return detections
 
     except Exception as e:
+        import traceback
         print(f"[detector] ❌ HF Space API error: {e}")
+        traceback.print_exc()
         # Return empty list — pipeline will fall back to grid analysis
         return []
     finally:
