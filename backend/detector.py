@@ -3,7 +3,9 @@ RetailEye — YOLOv8 Dual-Model Product & Shelf Detector
 Two separate YOLO models run in parallel:
   - products.pt  → product detection   (class 0 = product)
   - empty.pt     → empty space detection (class 0 = empty_space)
-Results are merged into a unified detection list.
+
+Models are auto-downloaded from HuggingFace if not present locally:
+  https://huggingface.co/Kushagra-Kataria/yolo-shelf-detector
 """
 
 import os
@@ -11,37 +13,55 @@ import numpy as np
 from ultralytics import YOLO
 
 # ---------------------------------------------------------------------------
+# HuggingFace model download
+# ---------------------------------------------------------------------------
+_HF_REPO = "Kushagra-Kataria/yolo-shelf-detector"
+_MODEL_DIR = os.path.join(os.path.dirname(__file__), "models")
+os.makedirs(_MODEL_DIR, exist_ok=True)
+
+
+def _ensure_model(filename: str) -> str:
+    """
+    Return local path to a YOLO .pt file.
+    If the file doesn't exist locally, download it from HuggingFace.
+    """
+    local_path = os.path.join(_MODEL_DIR, filename)
+    if os.path.isfile(local_path):
+        return local_path
+
+    print(f"[detector] ⬇️  Downloading {filename} from HuggingFace ({_HF_REPO})...")
+    try:
+        from huggingface_hub import hf_hub_download
+
+        downloaded = hf_hub_download(
+            repo_id=_HF_REPO,
+            filename=filename,
+            local_dir=_MODEL_DIR,
+            local_dir_use_symlinks=False,
+        )
+        print(f"[detector] ✅ Downloaded {filename} → {downloaded}")
+        return downloaded
+    except Exception as e:
+        print(f"[detector] ❌ Failed to download {filename}: {e}")
+        raise RuntimeError(
+            f"Model {filename} not found locally and could not be downloaded "
+            f"from HuggingFace repo '{_HF_REPO}'. "
+            f"Ensure the repo exists and is accessible."
+        ) from e
+
+
+# ---------------------------------------------------------------------------
 # Model loading — Dual Model Architecture
 # ---------------------------------------------------------------------------
-_MODEL_DIR = os.path.join(os.path.dirname(__file__), "models")
-_PRODUCT_MODEL_PATH = os.path.join(_MODEL_DIR, "products.pt")
-_EMPTY_MODEL_PATH = os.path.join(_MODEL_DIR, "empty.pt")
-_LEGACY_MODEL_PATH = os.path.join(_MODEL_DIR, "best.pt")
+_PRODUCT_MODEL_PATH = _ensure_model("products.pt")
+_EMPTY_MODEL_PATH = _ensure_model("empty.pt")
 
-# --- Product Detection Model ---
-if os.path.isfile(_PRODUCT_MODEL_PATH):
-    _model_product = YOLO(_PRODUCT_MODEL_PATH)
-    print(f"[detector] ✅ Product model loaded: {_PRODUCT_MODEL_PATH}")
-elif os.path.isfile(_LEGACY_MODEL_PATH):
-    _model_product = YOLO(_LEGACY_MODEL_PATH)
-    print(f"[detector] ⚠️  products.pt not found — falling back to best.pt")
-else:
-    _model_product = YOLO("yolov8n.pt")
-    print("[detector] ⚠️  No product model found — using default yolov8n.pt")
-
+_model_product = YOLO(_PRODUCT_MODEL_PATH)
+print(f"[detector] ✅ Product model loaded: {_PRODUCT_MODEL_PATH}")
 print(f"[detector]    Product model classes: {_model_product.names}")
 
-# --- Empty Space Detection Model ---
-if os.path.isfile(_EMPTY_MODEL_PATH):
-    _model_empty = YOLO(_EMPTY_MODEL_PATH)
-    print(f"[detector] ✅ Empty space model loaded: {_EMPTY_MODEL_PATH}")
-elif os.path.isfile(_LEGACY_MODEL_PATH):
-    _model_empty = YOLO(_LEGACY_MODEL_PATH)
-    print(f"[detector] ⚠️  empty.pt not found — falling back to best.pt")
-else:
-    _model_empty = YOLO("yolov8n.pt")
-    print("[detector] ⚠️  No empty model found — using default yolov8n.pt")
-
+_model_empty = YOLO(_EMPTY_MODEL_PATH)
+print(f"[detector] ✅ Empty space model loaded: {_EMPTY_MODEL_PATH}")
 print(f"[detector]    Empty model classes: {_model_empty.names}")
 
 

@@ -15,8 +15,8 @@ export function RowBreakdown({ rows = [] }) {
       <CardHeader className="py-5 border-b border-[#E2E8F0]">
         <CardTitle className="text-[11px] font-bold tracking-wider text-[#0F172A] uppercase">ROW BREAKDOWN ⓘ</CardTitle>
       </CardHeader>
-      <CardContent className="p-6 flex flex-col justify-between h-[calc(100%-61px)]">
-        <div className="flex flex-col justify-between h-full w-full gap-5">
+      <CardContent className="p-6 flex flex-col overflow-y-auto custom-scrollbar h-[calc(100%-61px)]">
+        <div className="flex flex-col w-full gap-5">
           {rows.map((row, idx) => {
             const colors = getColors(row.status);
             return (

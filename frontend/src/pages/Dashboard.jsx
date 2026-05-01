@@ -310,13 +310,13 @@ export function Dashboard() {
       <KPICards metrics={metrics} historyItems={history} />
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-6">
+        <div className="lg:col-span-6 h-[450px] overflow-hidden">
           <OutputPreview imageSrc={imageSrc} detections={detections} isAnalyzed={!!imageSrc} />
         </div>
-        <div className="lg:col-span-3">
+        <div className="lg:col-span-3 h-[450px]">
           <RowBreakdown rows={mapRows(reportRows)} />
         </div>
-        <div className="lg:col-span-3">
+        <div className="lg:col-span-3 h-[450px] overflow-y-auto custom-scrollbar">
           <ShelfHealthScore
             score={latestResult?.shelf_score ?? stats?.avg_shelf_score ?? 0}
             label={(latestResult?.shelf_score ?? 0) >= 80 ? "GOOD" : (latestResult?.shelf_score ?? 0) >= 50 ? "FAIR" : "CRITICAL"}
@@ -325,9 +325,9 @@ export function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-4"><RestockSuggestions items={mapSuggestions(reportRows)} /></div>
-        <div className="lg:col-span-4"><Heatmap rows={reportRows} /></div>
-        <div className="lg:col-span-4"><RestockPriority priorityData={mapPriority(latestResult?.report?.restock_priority ?? [])} /></div>
+        <div className="lg:col-span-4 h-[450px] overflow-y-auto custom-scrollbar"><RestockSuggestions items={mapSuggestions(reportRows)} /></div>
+        <div className="lg:col-span-4 h-[450px] overflow-y-auto custom-scrollbar"><Heatmap rows={reportRows} /></div>
+        <div className="lg:col-span-4 h-[450px] overflow-y-auto custom-scrollbar"><RestockPriority priorityData={mapPriority(latestResult?.report?.restock_priority ?? [])} /></div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

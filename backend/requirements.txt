@@ -2,14 +2,12 @@ fastapi
 uvicorn[standard]
 python-multipart
 ultralytics
-opencv-python
+opencv-python-headless
 groq
 python-dotenv
 Pillow
 numpy
-motor
-pymongo
-dnspython
-
+asyncpg
+huggingface_hub
 PyJWT
 bcrypt

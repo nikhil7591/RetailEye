@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+.env
+outputs/*
+models/*.pt
+models/*.onnx
+.git
+.gitignore
+test_api.py
+data.yaml

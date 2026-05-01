@@ -1,0 +1,18 @@
+services:
+  # ── Backend (FastAPI + YOLO) ──────────────────────────────
+  - type: web
+    name: retaileye-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: starter  # $7/mo — 512MB RAM, needed for YOLO models
+    envVars:
+      - key: MONGO_URI
+        sync: false  # Set manually in Render dashboard
+      - key: MONGO_DB
+        value: retaileye
+      - key: GROQ_API_KEY
+        sync: false  # Set manually in Render dashboard
+      - key: CORS_ORIGINS
+        sync: false  # Set to your frontend URL after deploy
+    healthCheckPath: /health
