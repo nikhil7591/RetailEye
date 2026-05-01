@@ -110,6 +110,12 @@ export async function getHistory(limit = 50, skip = 0) {
   return apiFetch(`/history?limit=${limit}&skip=${skip}`);
 }
 
+// ─── Notifications ─────────────────────────────────────────────────────────
+
+export async function getNotifications(limit = 10) {
+  return apiFetch(`/notifications?limit=${limit}`);
+}
+
 export async function getHistoryItem(id) {
   return apiFetch(`/history/${id}`);
 }

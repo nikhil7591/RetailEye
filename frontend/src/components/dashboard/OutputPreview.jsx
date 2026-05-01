@@ -132,77 +132,81 @@ export function OutputPreview({ imageSrc, detections = [], isAnalyzed = false })
         </CardContent>
       </Card>
 
-      {/* Fullscreen Modal */}
+      {/* Full View Modal */}
       {isFullscreen && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-[#0F172A]/95 backdrop-blur-sm">
-          {/* Toolbar */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
-            <h2 className="text-white font-bold text-sm tracking-wide">Analysis Output — Full View</h2>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleZoomOut}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-medium transition-colors"
-              >
-                <ZoomOut className="h-4 w-4" /> Zoom Out
-              </button>
-              <span className="text-white/60 text-xs font-mono w-12 text-center">{Math.round(zoom * 100)}%</span>
-              <button
-                onClick={handleZoomIn}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-medium transition-colors"
-              >
-                <ZoomIn className="h-4 w-4" /> Zoom In
-              </button>
-              <button
-                onClick={handleReset}
-                className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-medium transition-colors"
-              >
-                Reset
-              </button>
-              <button
-                onClick={() => { setIsFullscreen(false); setZoom(1); }}
-                className="ml-2 px-3 py-1.5 rounded-lg bg-red-600/80 hover:bg-red-600 text-white text-xs font-bold transition-colors"
-              >
-                ✕ Close
-              </button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="flex w-full max-w-6xl max-h-[90vh] flex-col overflow-hidden rounded-2xl bg-[#0F172A] shadow-2xl border border-white/10">
+            {/* Toolbar */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+              <h2 className="text-white font-bold text-sm tracking-wide">Analysis Output — Full View</h2>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleZoomOut}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-medium transition-colors"
+                >
+                  <ZoomOut className="h-4 w-4" /> Zoom Out
+                </button>
+                <span className="text-white/60 text-xs font-mono w-12 text-center">{Math.round(zoom * 100)}%</span>
+                <button
+                  onClick={handleZoomIn}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-medium transition-colors"
+                >
+                  <ZoomIn className="h-4 w-4" /> Zoom In
+                </button>
+                <button
+                  onClick={handleReset}
+                  className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-medium transition-colors"
+                >
+                  Reset
+                </button>
+                <button
+                  onClick={() => { setIsFullscreen(false); setZoom(1); }}
+                  className="ml-2 px-3 py-1.5 rounded-lg bg-red-600/80 hover:bg-red-600 text-white text-xs font-bold transition-colors"
+                >
+                  ✕ Close
+                </button>
+              </div>
             </div>
-          </div>
 
-          {/* Scrollable image area with drag-to-pan */}
-          <div
-            ref={scrollRef}
-            className="flex-1 overflow-auto p-6"
-            style={{ cursor: zoom > 1 ? (isPanning ? "grabbing" : "grab") : "default" }}
-            onWheel={(e) => {
-              if (e.ctrlKey || e.metaKey) {
-                e.preventDefault();
-                setZoom(z => Math.min(Math.max(z + (e.deltaY < 0 ? 0.15 : -0.15), 0.5), 4));
-              }
-            }}
-            onMouseDown={(e) => {
-              if (zoom > 1 && e.button === 0) {
-                setIsPanning(true);
-                setPanStart({ x: e.clientX + scrollRef.current.scrollLeft, y: e.clientY + scrollRef.current.scrollTop });
-              }
-            }}
-            onMouseMove={(e) => {
-              if (isPanning && scrollRef.current) {
-                scrollRef.current.scrollLeft = panStart.x - e.clientX;
-                scrollRef.current.scrollTop = panStart.y - e.clientY;
-              }
-            }}
-            onMouseUp={() => setIsPanning(false)}
-            onMouseLeave={() => setIsPanning(false)}
-          >
-            <img
-              src={imageSrc}
-              alt="Full shelf"
-              draggable={false}
-              style={{
-                width: `${zoom * 100}%`,
-                display: "block",
-                userSelect: "none",
+            {/* Scrollable image area with drag-to-pan */}
+            <div
+              ref={scrollRef}
+              className="flex-1 overflow-auto p-4"
+              style={{ cursor: zoom > 1 ? (isPanning ? "grabbing" : "grab") : "default" }}
+              onWheel={(e) => {
+                if (e.ctrlKey || e.metaKey) {
+                  e.preventDefault();
+                  setZoom((z) => Math.min(Math.max(z + (e.deltaY < 0 ? 0.15 : -0.15), 0.5), 4));
+                }
               }}
-            />
+              onMouseDown={(e) => {
+                if (zoom > 1 && e.button === 0) {
+                  setIsPanning(true);
+                  setPanStart({ x: e.clientX + scrollRef.current.scrollLeft, y: e.clientY + scrollRef.current.scrollTop });
+                }
+              }}
+              onMouseMove={(e) => {
+                if (isPanning && scrollRef.current) {
+                  scrollRef.current.scrollLeft = panStart.x - e.clientX;
+                  scrollRef.current.scrollTop = panStart.y - e.clientY;
+                }
+              }}
+              onMouseUp={() => setIsPanning(false)}
+              onMouseLeave={() => setIsPanning(false)}
+            >
+              <div className="flex min-h-full min-w-full items-center justify-center">
+                <img
+                  src={imageSrc}
+                  alt="Full shelf"
+                  draggable={false}
+                  style={
+                    zoom === 1
+                      ? { width: "100%", height: "100%", objectFit: "contain", display: "block", userSelect: "none" }
+                      : { width: `${zoom * 100}%`, display: "block", userSelect: "none" }
+                  }
+                />
+              </div>
+            </div>
           </div>
         </div>
       )}

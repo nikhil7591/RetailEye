@@ -29,11 +29,6 @@ export function Sidebar() {
             <Link
               key={item.name}
               to={item.href}
-              onClick={() => {
-                if (item.name === "Dashboard" && location.pathname === "/dashboard") {
-                  window.dispatchEvent(new CustomEvent("retaileye:new-upload"));
-                }
-              }}
               className={cn(
                 "group flex items-center rounded-xl px-4 py-3 text-sm font-medium transition-colors",
                 isActive

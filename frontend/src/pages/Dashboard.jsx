@@ -142,12 +142,22 @@ function ProcessingView({ progress, state, filename }) {
 
 // ── Main Dashboard ──
 export function Dashboard() {
-  const [phase, setPhase] = useState("loading"); // loading | idle | uploading | processing | active | error
+  const STORAGE_KEY = "retaileye:latest-result";
+  const [persistedResult] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [phase, setPhase] = useState(persistedResult ? "active" : "loading"); // loading | idle | uploading | processing | active | error
   const [activeTab, setActiveTab] = useState("single");
   const [stats, setStats] = useState(null);
   const [history, setHistory] = useState([]);
   const [error, setError] = useState(null);
-  const [latestResult, setLatestResult] = useState(null);
+  const [latestResult, setLatestResult] = useState(persistedResult);
   const [progress, setProgress] = useState(0);
   const [uploadFilename, setUploadFilename] = useState("");
 
@@ -171,9 +181,26 @@ export function Dashboard() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  // Persist latest results across route changes
+  useEffect(() => {
+    try {
+      if (latestResult) {
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(latestResult));
+      } else {
+        sessionStorage.removeItem(STORAGE_KEY);
+      }
+    } catch {
+      // Storage is best-effort; ignore failures.
+    }
+  }, [latestResult, STORAGE_KEY]);
+
   // Listen for "New Upload" button from Navbar
   useEffect(() => {
-    const handler = () => setPhase("idle");
+    const handler = () => {
+      setLatestResult(null);
+      setPhase("idle");
+      setError(null);
+    };
     window.addEventListener("retaileye:new-upload", handler);
     return () => window.removeEventListener("retaileye:new-upload", handler);
   }, []);
@@ -202,7 +229,11 @@ export function Dashboard() {
     }
   };
 
-  const resetToUpload = () => { setPhase("idle"); setError(null); };
+  const resetToUpload = () => {
+    setLatestResult(null);
+    setPhase("idle");
+    setError(null);
+  };
 
   // ── Render ──
   if (phase === "loading") {

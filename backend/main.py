@@ -425,6 +425,34 @@ async def clear_all_history():
 
 
 # ---------------------------------------------------------------------------
+# Routes — Notifications
+# ---------------------------------------------------------------------------
+@app.get("/notifications")
+async def get_notifications(limit: int = 10):
+    query = {"report.overall_alert": {"$in": ["Critical", "Warning"]}}
+    cursor = db.analyses.find(query, {"report._raw_rows": 0}).sort("created_at", -1).limit(limit)
+    items = []
+    async for doc in cursor:
+        doc = _oid_to_str(doc)
+        report = doc.get("report", {})
+        alert = report.get("overall_alert", "Warning")
+        occ = int(round(report.get("overall_occupancy", 0)))
+        empty = int(report.get("total_empty_slots", 0))
+        title = "Critical alert" if alert == "Critical" else "Warning alert"
+        body = f"Occupancy {occ}% | Empty slots {empty}"
+        items.append({
+            "id": doc.get("_id"),
+            "analysis_id": doc.get("_id"),
+            "filename": doc.get("filename"),
+            "alert": alert,
+            "title": title,
+            "body": body,
+            "created_at": doc.get("created_at"),
+        })
+    return JSONResponse({"items": items})
+
+
+# ---------------------------------------------------------------------------
 # Routes — Stats (for Dashboard KPIs)
 # ---------------------------------------------------------------------------
 @app.get("/stats")

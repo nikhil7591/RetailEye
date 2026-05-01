@@ -4,8 +4,11 @@ import { Card, CardHeader, CardTitle, CardContent } from "../components/ui/Card"
 import { getHistory, getFileUrl } from "../services/api";
 import { Loader } from "../components/ui/Loader";
 import { cn } from "../lib/utils";
+import { useLocation, useNavigate } from "react-router-dom";
 
 export function Alerts() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [alerts, setAlerts]     = useState([]);
   const [loading, setLoading]   = useState(true);
   const [resolved, setResolved] = useState(new Set());
@@ -36,6 +39,16 @@ export function Alerts() {
     };
     load();
   }, []);
+
+  useEffect(() => {
+    const selectedId = location.state?.selectedId;
+    if (!selectedId || alerts.length === 0 || selected?._id === selectedId) return;
+    const match = alerts.find((a) => a._id === selectedId);
+    if (match) {
+      setSelected(match);
+      navigate(".", { replace: true, state: {} });
+    }
+  }, [alerts, location.state, selected]);
 
   const markResolved = (id) => setResolved(prev => new Set([...prev, id]));
 

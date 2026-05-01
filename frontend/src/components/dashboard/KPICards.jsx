@@ -1,5 +1,5 @@
 import { Card, CardContent } from "../ui/Card";
-import { LineChart, Line, ResponsiveContainer } from "recharts";
+import { AreaChart, Area, ResponsiveContainer } from "recharts";
 import { Star, AlertCircle, Box, Hexagon } from "lucide-react";
 
 const data1 = [{ value: 40 }, { value: 30 }, { value: 55 }, { value: 45 }, { value: 70 }, { value: 65 }, { value: 80 }];
@@ -84,15 +84,22 @@ export function KPICards({ metrics }) {
             
             <div className="mt-4 pt-2 h-14 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={card.chartData}>
-                  <Line 
-                    type="monotone" 
-                    dataKey="value" 
-                    stroke={card.chartColor} 
-                    strokeWidth={2} 
-                    dot={false} 
+                <AreaChart data={card.chartData}>
+                  <defs>
+                    <linearGradient id={`kpiGradient-${i}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={card.chartColor} stopOpacity={0.35} />
+                      <stop offset="95%" stopColor={card.chartColor} stopOpacity={0.05} />
+                    </linearGradient>
+                  </defs>
+                  <Area
+                    type="monotone"
+                    dataKey="value"
+                    stroke={card.chartColor}
+                    strokeWidth={2}
+                    fill={`url(#kpiGradient-${i})`}
+                    dot={false}
                   />
-                </LineChart>
+                </AreaChart>
               </ResponsiveContainer>
             </div>
           </CardContent>
