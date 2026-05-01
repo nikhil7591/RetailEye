@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# System deps for OpenCV headless + general build tools
+# System deps for OpenCV headless
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     libsm6 \
@@ -11,7 +11,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Install Python deps first (cache-friendly layer)
+# Install PyTorch CPU-only FIRST (saves ~1.5GB vs full CUDA version)
+RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+# Install remaining Python deps
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -25,5 +28,4 @@ RUN mkdir -p outputs models
 EXPOSE 10000
 
 # Start the server
-# Render injects $PORT; default to 10000 if not set
 CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-10000}"]
