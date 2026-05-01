@@ -330,13 +330,16 @@ Set in Vercel dashboard:
 
 <div align="center">
 
-**Nikhil Kumar**
-CSE-AI Student | Chitkara University
+**Nikhil Kumar and Kushagra Kataria**  
 
-📧 nikhil759100@gmail.com 
+
+📧 nikhil759100@gmail.com
 
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-0077B5?style=flat&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/nikhil-kumar-2974292a9/)
-[![GitHub](https://img.shields.io/badge/GitHub-Follow-181717?style=flat&logo=github&logoColor=white)](https://github.com/nikhil7591)
+
+📧 kushagrakataria@gmail.com
+
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-0077B5?style=flat&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/kushagra-kataria-04829a2ba/)
 
 *"Built to explore how computer vision and LLM agents can eliminate manual shelf auditing in retail — from image to insight, zero human counting."*
 
